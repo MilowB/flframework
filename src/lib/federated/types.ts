@@ -34,6 +34,15 @@ export interface ServerConfig {
   modelArchitecture: string;
 }
 
+export interface WeightsSnapshot {
+  W1Mean: number;
+  W1Std: number;
+  W2Mean: number;
+  W2Std: number;
+  b1Mean: number;
+  b2Mean: number;
+}
+
 export interface RoundMetrics {
   round: number;
   globalLoss: number;
@@ -41,6 +50,7 @@ export interface RoundMetrics {
   participatingClients: string[];
   aggregationTime: number;
   timestamp: number;
+  weightsSnapshot?: WeightsSnapshot;
 }
 
 export interface FederatedState {

@@ -2,6 +2,7 @@ import { useFederatedLearning } from '@/hooks/useFederatedLearning';
 import { ServerPanel } from '@/components/federated/ServerPanel';
 import { ClientCard } from '@/components/federated/ClientCard';
 import { MetricsChart } from '@/components/federated/MetricsChart';
+import { WeightsChart } from '@/components/federated/WeightsChart';
 import { ControlPanel } from '@/components/federated/ControlPanel';
 import { NetworkVisualization } from '@/components/federated/NetworkVisualization';
 import { RoundHistory } from '@/components/federated/RoundHistory';
@@ -108,6 +109,7 @@ const Index = () => {
             </Tabs>
 
             <MetricsChart history={state.roundHistory} />
+            <WeightsChart history={state.roundHistory} />
           </div>
 
           {/* Right Sidebar - History */}
