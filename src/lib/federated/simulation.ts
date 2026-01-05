@@ -1,4 +1,4 @@
-import { ModelWeights, ClientState, RoundMetrics, ServerConfig, FederatedState } from './types';
+import { ModelWeights, ClientState, RoundMetrics, FederatedState, WeightsSnapshot } from './types';
 import { aggregationMethods } from './aggregations';
 import { 
   initializeMLPWeights, 
@@ -10,6 +10,29 @@ import {
   cloneWeights,
   MLPWeights
 } from './mlp';
+
+// Compute weights statistics for visualization
+const computeWeightsSnapshot = (model: ModelWeights): WeightsSnapshot => {
+  const W1 = model.layers[0];
+  const W2 = model.layers[1];
+  const b1 = model.bias.slice(0, 8);
+  const b2 = model.bias.slice(8);
+
+  const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const std = (arr: number[]) => {
+    const m = mean(arr);
+    return Math.sqrt(arr.reduce((a, b) => a + (b - m) ** 2, 0) / arr.length);
+  };
+
+  return {
+    W1Mean: mean(W1),
+    W1Std: std(W1),
+    W2Mean: mean(W2),
+    W2Std: std(W2),
+    b1Mean: mean(b1),
+    b2Mean: mean(b2),
+  };
+};
 
 // MLP Configuration
 const INPUT_SIZE = 2;
@@ -204,6 +227,7 @@ export const runFederatedRound = async (
     participatingClients: participatingIds,
     aggregationTime,
     timestamp: Date.now(),
+    weightsSnapshot: computeWeightsSnapshot(newGlobalModel),
   };
 
   onStateUpdate({
