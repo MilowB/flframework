@@ -1,0 +1,142 @@
+import { useState, useCallback, useRef } from 'react';
+import { FederatedState, ClientState, ServerConfig } from '@/lib/federated/types';
+import { initializeModel, createClient, runFederatedRound } from '@/lib/federated/simulation';
+
+const defaultServerConfig: ServerConfig = {
+  aggregationMethod: 'fedavg',
+  clientsPerRound: 3,
+  totalRounds: 10,
+  minClientsRequired: 2,
+  modelArchitecture: 'mlp-small',
+};
+
+export const useFederatedLearning = (initialClients: number = 5) => {
+  const [state, setState] = useState<FederatedState>(() => ({
+    isRunning: false,
+    currentRound: 0,
+    totalRounds: defaultServerConfig.totalRounds,
+    clients: Array.from({ length: initialClients }, (_, i) => createClient(i)),
+    serverConfig: defaultServerConfig,
+    roundHistory: [],
+    globalModel: null,
+  }));
+
+  const abortRef = useRef(false);
+
+  const updateClient = useCallback((clientId: string, update: Partial<ClientState>) => {
+    setState(prev => ({
+      ...prev,
+      clients: prev.clients.map(c =>
+        c.id === clientId ? { ...c, ...update } : c
+      ),
+    }));
+  }, []);
+
+  const updateState = useCallback((update: Partial<FederatedState>) => {
+    setState(prev => ({ ...prev, ...update }));
+  }, []);
+
+  const initializeTraining = useCallback(() => {
+    const model = initializeModel(state.serverConfig.modelArchitecture);
+    setState(prev => ({
+      ...prev,
+      globalModel: model,
+      currentRound: 0,
+      roundHistory: [],
+      clients: prev.clients.map(c => ({
+        ...c,
+        status: 'idle' as const,
+        progress: 0,
+        localLoss: 0,
+        localAccuracy: 0,
+        roundsParticipated: 0,
+      })),
+    }));
+  }, [state.serverConfig.modelArchitecture]);
+
+  const startTraining = useCallback(async () => {
+    if (!state.globalModel) {
+      initializeTraining();
+    }
+    
+    abortRef.current = false;
+    setState(prev => ({ ...prev, isRunning: true }));
+
+    const currentState = state.globalModel ? state : {
+      ...state,
+      globalModel: initializeModel(state.serverConfig.modelArchitecture),
+    };
+
+    for (let round = currentState.currentRound; round < currentState.serverConfig.totalRounds; round++) {
+      if (abortRef.current) break;
+
+      try {
+        await runFederatedRound(
+          { ...currentState, currentRound: round },
+          updateState,
+          updateClient
+        );
+        
+        // Small delay between rounds
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error('Round failed:', error);
+        break;
+      }
+    }
+
+    setState(prev => ({ ...prev, isRunning: false }));
+  }, [state, initializeTraining, updateState, updateClient]);
+
+  const stopTraining = useCallback(() => {
+    abortRef.current = true;
+    setState(prev => ({ ...prev, isRunning: false }));
+  }, []);
+
+  const resetTraining = useCallback(() => {
+    abortRef.current = true;
+    setState(prev => ({
+      ...prev,
+      isRunning: false,
+      currentRound: 0,
+      roundHistory: [],
+      globalModel: null,
+      clients: prev.clients.map(c => ({
+        ...c,
+        status: 'idle' as const,
+        progress: 0,
+        localLoss: 0,
+        localAccuracy: 0,
+        roundsParticipated: 0,
+      })),
+    }));
+  }, []);
+
+  const setClientCount = useCallback((count: number) => {
+    setState(prev => ({
+      ...prev,
+      clients: Array.from({ length: count }, (_, i) => 
+        prev.clients[i] || createClient(i)
+      ),
+    }));
+  }, []);
+
+  const updateServerConfig = useCallback((config: Partial<ServerConfig>) => {
+    setState(prev => ({
+      ...prev,
+      serverConfig: { ...prev.serverConfig, ...config },
+      totalRounds: config.totalRounds ?? prev.totalRounds,
+    }));
+  }, []);
+
+  return {
+    state,
+    startTraining,
+    stopTraining,
+    resetTraining,
+    initializeTraining,
+    setClientCount,
+    updateServerConfig,
+    updateClient,
+  };
+};
