@@ -14,80 +14,74 @@ export const CodePreview = () => {
     setTimeout(() => setCopiedTab(null), 2000);
   };
 
-  const clientCode = `// Définition du comportement client personnalisé
-const customClientBehavior: ClientBehavior = {
-  onReceiveModel: async (model: ModelWeights) => {
-    console.log('Modèle reçu, version:', model.version);
-    // Charger le modèle dans le framework ML local
-    await loadModel(model);
-  },
+  const clientCode = `// MLP réel pour XOR - Entraînement client
+import { trainEpoch, computeAccuracy, cloneWeights } from './mlp';
+
+// Chaque client reçoit le modèle global et l'entraîne localement
+const trainClient = async (globalMLP: MLPWeights, clientData) => {
+  const localMLP = cloneWeights(globalMLP);
   
-  onTrain: async (model, epochs) => {
-    // Entraînement local sur les données du client
-    const result = await trainLocal(model, {
-      epochs,
-      learningRate: 0.01,
-      batchSize: 32,
-    });
-    
-    return {
-      weights: result.newWeights,
-      loss: result.finalLoss,
-      accuracy: result.accuracy,
-    };
-  },
+  const { inputs, outputs } = clientData;
+  const localEpochs = 5;
+  const learningRate = 0.5;
   
-  onSendModel: async (weights) => {
-    // Envoyer les poids mis à jour au serveur
-    await sendToServer(weights);
-  },
+  let loss = 0;
+  let accuracy = 0;
+  
+  for (let epoch = 0; epoch < localEpochs; epoch++) {
+    loss = trainEpoch(inputs, outputs, localMLP, learningRate);
+    accuracy = computeAccuracy(inputs, outputs, localMLP);
+  }
+  
+  return { weights: localMLP, loss, accuracy };
 };`;
 
-  const aggregationCode = `// Fonction d'agrégation personnalisée
-const customAggregation: AggregationFunction = (clientWeights) => {
-  // Exemple: Agrégation avec pondération par qualité
-  const qualityScores = clientWeights.map(c => 
-    1 / (c.loss + 0.01) // Plus la loss est basse, plus le poids est élevé
-  );
-  const totalScore = qualityScores.reduce((a, b) => a + b, 0);
+  const aggregationCode = `// Agrégation FedAVG réelle
+const fedAvg = (clientWeights) => {
+  const totalDataSize = clientWeights.reduce((sum, c) => sum + c.dataSize, 0);
   
-  const aggregated = initializeEmptyWeights();
+  // Moyenne pondérée par taille des données
+  const aggregatedW1 = initZeroMatrix(2, 8);
+  const aggregatedW2 = initZeroMatrix(8, 1);
   
-  clientWeights.forEach((client, idx) => {
-    const weight = qualityScores[idx] / totalScore;
-    addWeightedModel(aggregated, client.weights, weight);
-  });
+  for (const { weights, dataSize } of clientWeights) {
+    const weight = dataSize / totalDataSize;
+    
+    // W1: [2 x 8], W2: [8 x 1]
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 8; j++) {
+        aggregatedW1[i][j] += weights.W1[i][j] * weight;
+      }
+    }
+    for (let i = 0; i < 8; i++) {
+      aggregatedW2[i][0] += weights.W2[i][0] * weight;
+    }
+  }
   
-  return aggregated;
+  return { W1: aggregatedW1, W2: aggregatedW2, b1, b2 };
+};`;
+
+  const serverCode = `// Génération des données XOR synthétiques
+const generateClientData = (numSamples: number, noiseLevel = 0.1) => {
+  const inputs = [];
+  const outputs = [];
+  
+  for (let i = 0; i < numSamples; i++) {
+    const x1 = Math.random() > 0.5 ? 1 : 0;
+    const x2 = Math.random() > 0.5 ? 1 : 0;
+    const xorResult = x1 !== x2 ? 1 : 0;
+    
+    inputs.push([
+      x1 + (Math.random() - 0.5) * noiseLevel,
+      x2 + (Math.random() - 0.5) * noiseLevel,
+    ]);
+    outputs.push([xorResult]);
+  }
+  return { inputs, outputs };
 };
 
-// Enregistrer la fonction personnalisée
-registerAggregation('quality-weighted', customAggregation);`;
-
-  const serverCode = `// Configuration du serveur
-const serverConfig: ServerConfig = {
-  aggregationMethod: 'fedavg',  // ou 'custom'
-  clientsPerRound: 5,
-  totalRounds: 100,
-  minClientsRequired: 3,
-  modelArchitecture: 'resnet-mini',
-};
-
-// Lancer le serveur fédéré
-const server = new FederatedServer(serverConfig);
-
-// Ajouter des clients
-clients.forEach(client => server.registerClient(client));
-
-// Démarrer l'entraînement
-await server.startTraining({
-  onRoundComplete: (metrics) => {
-    console.log(\`Round \${metrics.round}: Loss=\${metrics.loss}\`);
-  },
-  onTrainingComplete: (finalModel) => {
-    saveModel(finalModel, 'trained_model.pt');
-  },
-});`;
+// Architecture MLP: 2 → 8 → 1 (ReLU + Sigmoid)
+const mlp = initializeMLPWeights(2, 8, 1);`;
 
   return (
     <Card className="bg-gradient-card border-border shadow-card">
