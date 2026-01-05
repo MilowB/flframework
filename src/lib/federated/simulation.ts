@@ -1,23 +1,34 @@
 import { ModelWeights, ClientState, RoundMetrics, ServerConfig, FederatedState } from './types';
 import { aggregationMethods } from './aggregations';
+import { 
+  initializeMLPWeights, 
+  flattenWeights, 
+  unflattenWeights, 
+  generateClientData,
+  trainEpoch,
+  computeAccuracy,
+  cloneWeights,
+  MLPWeights
+} from './mlp';
 
-// Initialize random model weights
+// MLP Configuration
+const INPUT_SIZE = 2;
+const HIDDEN_SIZE = 8;
+const OUTPUT_SIZE = 1;
+
+// Store MLP weights for each entity
+const mlpWeightsStore: Map<string, MLPWeights> = new Map();
+const clientDataStore: Map<string, { inputs: number[][]; outputs: number[][] }> = new Map();
+
+// Initialize random model weights (using real MLP)
 export const initializeModel = (architecture: string): ModelWeights => {
-  const architectures: Record<string, { layers: number[]; bias: number }> = {
-    'mlp-small': { layers: [784, 128, 10], bias: 10 },
-    'mlp-medium': { layers: [784, 256, 128, 10], bias: 10 },
-    'mlp-large': { layers: [784, 512, 256, 128, 10], bias: 10 },
-    'cnn-simple': { layers: [32, 64, 128, 10], bias: 10 },
-    'resnet-mini': { layers: [64, 128, 256, 512, 10], bias: 10 },
-  };
-
-  const arch = architectures[architecture] || architectures['mlp-small'];
+  const mlpWeights = initializeMLPWeights(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+  mlpWeightsStore.set('global', mlpWeights);
   
+  const flat = flattenWeights(mlpWeights);
   return {
-    layers: arch.layers.map(size => 
-      Array.from({ length: size }, () => (Math.random() - 0.5) * 2)
-    ),
-    bias: Array.from({ length: arch.bias }, () => (Math.random() - 0.5) * 0.1),
+    layers: flat.layers,
+    bias: flat.bias,
     version: 0,
   };
 };
@@ -36,44 +47,63 @@ export const createClient = (index: number): ClientState => ({
   progress: 0,
   localLoss: 0,
   localAccuracy: 0,
-  dataSize: Math.floor(Math.random() * 5000) + 1000,
+  dataSize: Math.floor(Math.random() * 100) + 50, // Smaller dataset for XOR
   lastUpdate: Date.now(),
   roundsParticipated: 0,
 });
 
-// Simulate client training
+// Real client training with MLP on XOR data
 export const simulateClientTraining = async (
   client: ClientState,
   globalModel: ModelWeights,
   onProgress: (progress: number) => void
 ): Promise<{ weights: ModelWeights; loss: number; accuracy: number }> => {
-  const steps = 10;
-  let loss = 2.5 - Math.random() * 0.5;
-  let accuracy = 0.1 + Math.random() * 0.1;
-
-  for (let i = 0; i < steps; i++) {
-    await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
-    
-    // Simulate training progress
-    loss *= 0.85 + Math.random() * 0.1;
-    accuracy += (1 - accuracy) * (0.08 + Math.random() * 0.05);
-    
-    onProgress(((i + 1) / steps) * 100);
+  // Convert global model to MLP weights
+  const globalMLP = unflattenWeights(
+    { layers: globalModel.layers, bias: globalModel.bias },
+    INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE
+  );
+  
+  // Clone weights for local training
+  const localMLP = cloneWeights(globalMLP);
+  
+  // Get or generate client-specific data
+  if (!clientDataStore.has(client.id)) {
+    // Each client has different data (non-IID simulation)
+    const noiseLevel = 0.05 + Math.random() * 0.1;
+    clientDataStore.set(client.id, generateClientData(client.dataSize, noiseLevel));
   }
-
-  // Create updated weights with small perturbations
-  const newWeights: ModelWeights = {
-    layers: globalModel.layers.map(layer =>
-      layer.map(w => w + (Math.random() - 0.5) * 0.1)
-    ),
-    bias: globalModel.bias.map(b => b + (Math.random() - 0.5) * 0.05),
-    version: globalModel.version,
-  };
-
+  const { inputs, outputs } = clientDataStore.get(client.id)!;
+  
+  // Training configuration
+  const localEpochs = 5;
+  const learningRate = 0.5;
+  
+  let loss = 0;
+  let accuracy = 0;
+  
+  // Real training loop
+  for (let epoch = 0; epoch < localEpochs; epoch++) {
+    // Small delay to show progress
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    loss = trainEpoch(inputs, outputs, localMLP, learningRate);
+    accuracy = computeAccuracy(inputs, outputs, localMLP);
+    
+    onProgress(((epoch + 1) / localEpochs) * 100);
+  }
+  
+  // Convert back to flat format
+  const flat = flattenWeights(localMLP);
+  
   return {
-    weights: newWeights,
-    loss: Math.max(0.01, loss),
-    accuracy: Math.min(0.99, accuracy),
+    weights: {
+      layers: flat.layers,
+      bias: flat.bias,
+      version: globalModel.version,
+    },
+    loss,
+    accuracy,
   };
 };
 
