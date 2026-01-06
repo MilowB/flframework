@@ -1,8 +1,8 @@
 import { useFederatedLearning } from '@/hooks/useFederatedLearning';
 import { ServerPanel } from '@/components/federated/ServerPanel';
 import { ClientCard } from '@/components/federated/ClientCard';
+import { ServerCard } from '@/components/federated/ServerCard';
 import { MetricsChart } from '@/components/federated/MetricsChart';
-import { WeightsChart } from '@/components/federated/WeightsChart';
 import { ControlPanel } from '@/components/federated/ControlPanel';
 import { NetworkVisualization } from '@/components/federated/NetworkVisualization';
 import { RoundHistory } from '@/components/federated/RoundHistory';
@@ -77,9 +77,9 @@ const Index = () => {
                   <Network className="w-4 h-4" />
                   Réseau
                 </TabsTrigger>
-                <TabsTrigger value="clients" className="gap-2">
+                <TabsTrigger value="machines" className="gap-2">
                   <LayoutGrid className="w-4 h-4" />
-                  Clients
+                  Machines
                 </TabsTrigger>
                 <TabsTrigger value="code" className="gap-2">
                   <Code className="w-4 h-4" />
@@ -94,9 +94,13 @@ const Index = () => {
                 />
               </TabsContent>
 
-              <TabsContent value="clients" className="mt-4">
+              <TabsContent value="machines" className="mt-4">
                 <ScrollArea className="h-[400px] pr-4">
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <ServerCard 
+                      status={state.serverStatus} 
+                      modelVersion={state.globalModel?.version ?? 0}
+                    />
                     {state.clients.map((client) => (
                       <ClientCard key={client.id} client={client} />
                     ))}
@@ -110,7 +114,6 @@ const Index = () => {
             </Tabs>
 
             <MetricsChart history={state.roundHistory} />
-            <WeightsChart history={state.roundHistory} />
           </div>
 
           {/* Right Sidebar - History */}

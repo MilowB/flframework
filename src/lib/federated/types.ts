@@ -53,6 +53,8 @@ export interface RoundMetrics {
   weightsSnapshot?: WeightsSnapshot;
 }
 
+export type ServerStatus = 'idle' | 'sending' | 'waiting' | 'receiving' | 'evaluating' | 'completed';
+
 export interface FederatedState {
   isRunning: boolean;
   currentRound: number;
@@ -61,6 +63,7 @@ export interface FederatedState {
   serverConfig: ServerConfig;
   roundHistory: RoundMetrics[];
   globalModel: ModelWeights | null;
+  serverStatus: ServerStatus;
 }
 
 export type AggregationFunction = (

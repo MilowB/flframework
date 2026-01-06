@@ -1,4 +1,4 @@
-import { ModelWeights, ClientState, RoundMetrics, FederatedState, WeightsSnapshot } from './types';
+import { ModelWeights, ClientState, RoundMetrics, FederatedState, WeightsSnapshot, ServerStatus } from './types';
 import { aggregationMethods } from './aggregations';
 import { 
   initializeMLPWeights, 
@@ -192,7 +192,8 @@ export const selectClients = (
 export const runFederatedRound = async (
   state: FederatedState,
   onStateUpdate: (state: Partial<FederatedState>) => void,
-  onClientUpdate: (clientId: string, update: Partial<ClientState>) => void
+  onClientUpdate: (clientId: string, update: Partial<ClientState>) => void,
+  onServerStatusUpdate: (status: ServerStatus) => void
 ): Promise<RoundMetrics> => {
   const { serverConfig, clients, globalModel, currentRound } = state;
   
@@ -210,13 +211,15 @@ export const runFederatedRound = async (
   const clientResults: { weights: ModelWeights; dataSize: number }[] = [];
   const participatingIds = selectedClients.map(c => c.id);
 
-  // Phase 1: Distribute model to clients
+  // Phase 1: Server sends model to clients
+  onServerStatusUpdate('sending');
   for (const client of selectedClients) {
     onClientUpdate(client.id, { status: 'receiving', progress: 0 });
     await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
   }
 
-  // Phase 2: Local training
+  // Phase 2: Server waits for clients to train
+  onServerStatusUpdate('waiting');
   const trainingPromises = selectedClients.map(async (client) => {
     onClientUpdate(client.id, { status: 'training', progress: 0 });
     
@@ -233,8 +236,16 @@ export const runFederatedRound = async (
       localAccuracy: result.accuracy,
     });
 
-    await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 200));
+    return { result, client };
+  });
 
+  const trainedClients = await Promise.all(trainingPromises);
+
+  // Phase 3: Server receives models from clients
+  onServerStatusUpdate('receiving');
+  for (const { result, client } of trainedClients) {
+    await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 200));
+    
     clientResults.push({
       weights: result.weights,
       dataSize: client.dataSize,
@@ -245,13 +256,10 @@ export const runFederatedRound = async (
       lastUpdate: Date.now(),
       roundsParticipated: client.roundsParticipated + 1,
     });
+  }
 
-    return result;
-  });
-
-  const results = await Promise.all(trainingPromises);
-
-  // Phase 3: Aggregation
+  // Phase 4: Aggregation and Evaluation
+  onServerStatusUpdate('evaluating');
   const aggregationFn = aggregationMethods[serverConfig.aggregationMethod]?.fn || aggregationMethods.fedavg.fn;
   const aggregationStart = Date.now();
   const newGlobalModel = aggregationFn(clientResults);
@@ -259,6 +267,9 @@ export const runFederatedRound = async (
 
   // Evaluate global model on test set
   const testMetrics = evaluateOnTestSet(newGlobalModel);
+
+  // Server completed this round
+  onServerStatusUpdate('completed');
 
   // Reset completed clients to idle
   setTimeout(() => {

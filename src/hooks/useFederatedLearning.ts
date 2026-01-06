@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FederatedState, ClientState, ServerConfig } from '@/lib/federated/types';
+import { FederatedState, ClientState, ServerConfig, ServerStatus } from '@/lib/federated/types';
 import { initializeModel, createClient, runFederatedRound, preloadMNIST } from '@/lib/federated/simulation';
 
 const defaultServerConfig: ServerConfig = {
@@ -19,6 +19,7 @@ export const useFederatedLearning = (initialClients: number = 5) => {
     serverConfig: defaultServerConfig,
     roundHistory: [],
     globalModel: null,
+    serverStatus: 'idle' as ServerStatus,
   }));
 
   const [mnistLoaded, setMnistLoaded] = useState(false);
@@ -63,6 +64,10 @@ export const useFederatedLearning = (initialClients: number = 5) => {
     }));
   }, [state.serverConfig.modelArchitecture]);
 
+  const updateServerStatus = useCallback((status: ServerStatus) => {
+    setState(prev => ({ ...prev, serverStatus: status }));
+  }, []);
+
   const startTraining = useCallback(async () => {
     if (!state.globalModel) {
       initializeTraining();
@@ -83,10 +88,12 @@ export const useFederatedLearning = (initialClients: number = 5) => {
         await runFederatedRound(
           { ...currentState, currentRound: round },
           updateState,
-          updateClient
+          updateClient,
+          updateServerStatus
         );
         
         // Small delay between rounds
+        setState(prev => ({ ...prev, serverStatus: 'idle' }));
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch (error) {
         console.error('Round failed:', error);
@@ -94,8 +101,8 @@ export const useFederatedLearning = (initialClients: number = 5) => {
       }
     }
 
-    setState(prev => ({ ...prev, isRunning: false }));
-  }, [state, initializeTraining, updateState, updateClient]);
+    setState(prev => ({ ...prev, isRunning: false, serverStatus: 'idle' }));
+  }, [state, initializeTraining, updateState, updateClient, updateServerStatus]);
 
   const stopTraining = useCallback(() => {
     abortRef.current = true;
@@ -110,6 +117,7 @@ export const useFederatedLearning = (initialClients: number = 5) => {
       currentRound: 0,
       roundHistory: [],
       globalModel: null,
+      serverStatus: 'idle' as ServerStatus,
       clients: prev.clients.map(c => ({
         ...c,
         status: 'idle' as const,
