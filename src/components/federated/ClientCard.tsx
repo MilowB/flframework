@@ -59,6 +59,13 @@ const statusConfig = {
     bgColor: 'bg-destructive/10',
     borderColor: 'border-destructive/30',
   },
+  evaluating: {
+    icon: Cpu,
+    label: 'Evaluation',
+    color: 'text-destructive',
+    bgColor: 'bg-destructive/10',
+    borderColor: 'border-destructive/30',
+  },
 };
 
 export const ClientCard = ({ client }: ClientCardProps) => {

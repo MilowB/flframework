@@ -22,6 +22,12 @@ export const useFederatedLearning = (initialClients: number = 5) => {
     serverStatus: 'idle' as ServerStatus,
   }));
 
+  // Keep a ref to the latest state so async loops use up-to-date values
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
   const [mnistLoaded, setMnistLoaded] = useState(false);
   const abortRef = useRef(false);
 
@@ -76,22 +82,27 @@ export const useFederatedLearning = (initialClients: number = 5) => {
     abortRef.current = false;
     setState(prev => ({ ...prev, isRunning: true }));
 
-    const currentState = state.globalModel ? state : {
-      ...state,
-      globalModel: initializeModel(state.serverConfig.modelArchitecture),
+    // Use the latest state from ref so that roundHistory and other fields
+    // updated by previous rounds are preserved.
+    const startingState = stateRef.current.globalModel ? stateRef.current : {
+      ...stateRef.current,
+      globalModel: initializeModel(stateRef.current.serverConfig.modelArchitecture),
     };
 
-    for (let round = currentState.currentRound; round < currentState.serverConfig.totalRounds; round++) {
+    for (let round = startingState.currentRound; round < startingState.serverConfig.totalRounds; round++) {
       if (abortRef.current) break;
 
       try {
+        // Read the freshest state before each round
+        const latest = stateRef.current;
+
         await runFederatedRound(
-          { ...currentState, currentRound: round },
+          { ...latest, currentRound: round },
           updateState,
           updateClient,
           updateServerStatus
         );
-        
+
         // Small delay between rounds
         setState(prev => ({ ...prev, serverStatus: 'idle' }));
         await new Promise(resolve => setTimeout(resolve, 500));
