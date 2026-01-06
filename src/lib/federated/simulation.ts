@@ -4,19 +4,22 @@ import {
   initializeMLPWeights, 
   flattenWeights, 
   unflattenWeights, 
-  generateClientData,
   trainEpoch,
   computeAccuracy,
   cloneWeights,
-  MLPWeights
+  MLPWeights,
+  MNIST_INPUT_SIZE,
+  MNIST_HIDDEN_SIZE,
+  MNIST_OUTPUT_SIZE
 } from './mlp';
+import { loadMNISTTrain, getClientDataSubset, MNISTData } from './mnist';
 
 // Compute weights statistics for visualization
 const computeWeightsSnapshot = (model: ModelWeights): WeightsSnapshot => {
   const W1 = model.layers[0];
   const W2 = model.layers[1];
-  const b1 = model.bias.slice(0, 8);
-  const b2 = model.bias.slice(8);
+  const b1 = model.bias.slice(0, MNIST_HIDDEN_SIZE);
+  const b2 = model.bias.slice(MNIST_HIDDEN_SIZE);
 
   const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
   const std = (arr: number[]) => {
@@ -34,18 +37,21 @@ const computeWeightsSnapshot = (model: ModelWeights): WeightsSnapshot => {
   };
 };
 
-// MLP Configuration
-const INPUT_SIZE = 2;
-const HIDDEN_SIZE = 8;
-const OUTPUT_SIZE = 1;
-
-// Store MLP weights for each entity
+// Store MLP weights and MNIST data
 const mlpWeightsStore: Map<string, MLPWeights> = new Map();
 const clientDataStore: Map<string, { inputs: number[][]; outputs: number[][] }> = new Map();
+let mnistTrainData: MNISTData | null = null;
 
-// Initialize random model weights (using real MLP)
+// Preload MNIST data
+export const preloadMNIST = async (): Promise<void> => {
+  if (!mnistTrainData) {
+    mnistTrainData = await loadMNISTTrain();
+  }
+};
+
+// Initialize random model weights (using real MLP for MNIST)
 export const initializeModel = (architecture: string): ModelWeights => {
-  const mlpWeights = initializeMLPWeights(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+  const mlpWeights = initializeMLPWeights(MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
   mlpWeightsStore.set('global', mlpWeights);
   
   const flat = flattenWeights(mlpWeights);
@@ -70,37 +76,40 @@ export const createClient = (index: number): ClientState => ({
   progress: 0,
   localLoss: 0,
   localAccuracy: 0,
-  dataSize: Math.floor(Math.random() * 100) + 50, // Smaller dataset for XOR
+  dataSize: Math.floor(Math.random() * 400) + 200, // 200-600 MNIST samples per client
   lastUpdate: Date.now(),
   roundsParticipated: 0,
 });
 
-// Real client training with MLP on XOR data
+// Real client training with MLP on MNIST data
 export const simulateClientTraining = async (
   client: ClientState,
   globalModel: ModelWeights,
   onProgress: (progress: number) => void
 ): Promise<{ weights: ModelWeights; loss: number; accuracy: number }> => {
+  // Ensure MNIST is loaded
+  if (!mnistTrainData) {
+    mnistTrainData = await loadMNISTTrain();
+  }
+  
   // Convert global model to MLP weights
   const globalMLP = unflattenWeights(
     { layers: globalModel.layers, bias: globalModel.bias },
-    INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE
+    MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
   );
   
   // Clone weights for local training
   const localMLP = cloneWeights(globalMLP);
   
-  // Get or generate client-specific data
+  // Get or generate client-specific MNIST subset (non-IID)
   if (!clientDataStore.has(client.id)) {
-    // Each client has different data (non-IID simulation)
-    const noiseLevel = 0.05 + Math.random() * 0.1;
-    clientDataStore.set(client.id, generateClientData(client.dataSize, noiseLevel));
+    clientDataStore.set(client.id, getClientDataSubset(mnistTrainData, client.id, client.dataSize, true));
   }
   const { inputs, outputs } = clientDataStore.get(client.id)!;
   
-  // Training configuration
-  const localEpochs = 5;
-  const learningRate = 0.5;
+  // Training configuration for MNIST
+  const localEpochs = 3;
+  const learningRate = 0.01;
   
   let loss = 0;
   let accuracy = 0;
@@ -108,7 +117,7 @@ export const simulateClientTraining = async (
   // Real training loop
   for (let epoch = 0; epoch < localEpochs; epoch++) {
     // Small delay to show progress
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     loss = trainEpoch(inputs, outputs, localMLP, learningRate);
     accuracy = computeAccuracy(inputs, outputs, localMLP);

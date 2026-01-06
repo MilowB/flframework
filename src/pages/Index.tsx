@@ -14,6 +14,7 @@ import { Network, LayoutGrid, Code } from 'lucide-react';
 const Index = () => {
   const {
     state,
+    mnistLoaded,
     startTraining,
     stopTraining,
     resetTraining,
@@ -35,7 +36,7 @@ const Index = () => {
                 Federated Learning Framework
               </h1>
               <p className="text-sm text-muted-foreground">
-                Simulation d'apprentissage fédéré distribué
+                MNIST Classification — {mnistLoaded ? '60,000 images chargées' : 'Chargement MNIST...'}
               </p>
             </div>
           </div>

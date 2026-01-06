@@ -14,74 +14,75 @@ export const CodePreview = () => {
     setTimeout(() => setCopiedTab(null), 2000);
   };
 
-  const clientCode = `// MLP réel pour XOR - Entraînement client
+  const clientCode = `// MLP pour MNIST - Entraînement client
 import { trainEpoch, computeAccuracy, cloneWeights } from './mlp';
+import { loadMNISTTrain, getClientDataSubset } from './mnist';
 
 // Chaque client reçoit le modèle global et l'entraîne localement
-const trainClient = async (globalMLP: MLPWeights, clientData) => {
+const trainClient = async (globalMLP: MLPWeights, clientId: string) => {
   const localMLP = cloneWeights(globalMLP);
   
-  const { inputs, outputs } = clientData;
-  const localEpochs = 5;
-  const learningRate = 0.5;
+  // Données MNIST non-IID pour ce client
+  const mnist = await loadMNISTTrain();
+  const { inputs, outputs } = getClientDataSubset(mnist, clientId, 400, true);
   
-  let loss = 0;
-  let accuracy = 0;
+  const localEpochs = 3;
+  const learningRate = 0.01;
   
   for (let epoch = 0; epoch < localEpochs; epoch++) {
-    loss = trainEpoch(inputs, outputs, localMLP, learningRate);
-    accuracy = computeAccuracy(inputs, outputs, localMLP);
+    const loss = trainEpoch(inputs, outputs, localMLP, learningRate);
+    const accuracy = computeAccuracy(inputs, outputs, localMLP);
+    console.log(\`Epoch \${epoch + 1}: loss=\${loss.toFixed(4)}, acc=\${accuracy.toFixed(2)}\`);
   }
   
-  return { weights: localMLP, loss, accuracy };
+  return { weights: localMLP };
 };`;
 
-  const aggregationCode = `// Agrégation FedAVG réelle
+  const aggregationCode = `// Agrégation FedAVG pour MNIST (784 → 128 → 10)
 const fedAvg = (clientWeights) => {
   const totalDataSize = clientWeights.reduce((sum, c) => sum + c.dataSize, 0);
   
   // Moyenne pondérée par taille des données
-  const aggregatedW1 = initZeroMatrix(2, 8);
-  const aggregatedW2 = initZeroMatrix(8, 1);
+  const aggregated = {
+    W1: zeroMatrix(784, 128), // Input → Hidden
+    b1: zeros(128),
+    W2: zeroMatrix(128, 10),  // Hidden → Output (10 classes)
+    b2: zeros(10),
+  };
   
   for (const { weights, dataSize } of clientWeights) {
-    const weight = dataSize / totalDataSize;
+    const w = dataSize / totalDataSize;
     
-    // W1: [2 x 8], W2: [8 x 1]
-    for (let i = 0; i < 2; i++) {
-      for (let j = 0; j < 8; j++) {
-        aggregatedW1[i][j] += weights.W1[i][j] * weight;
-      }
-    }
-    for (let i = 0; i < 8; i++) {
-      aggregatedW2[i][0] += weights.W2[i][0] * weight;
-    }
+    for (let i = 0; i < 784; i++)
+      for (let j = 0; j < 128; j++)
+        aggregated.W1[i][j] += weights.W1[i][j] * w;
+    
+    for (let i = 0; i < 128; i++)
+      for (let j = 0; j < 10; j++)
+        aggregated.W2[i][j] += weights.W2[i][j] * w;
   }
   
-  return { W1: aggregatedW1, W2: aggregatedW2, b1, b2 };
+  return aggregated;
 };`;
 
-  const serverCode = `// Génération des données XOR synthétiques
-const generateClientData = (numSamples: number, noiseLevel = 0.1) => {
-  const inputs = [];
-  const outputs = [];
-  
-  for (let i = 0; i < numSamples; i++) {
-    const x1 = Math.random() > 0.5 ? 1 : 0;
-    const x2 = Math.random() > 0.5 ? 1 : 0;
-    const xorResult = x1 !== x2 ? 1 : 0;
-    
-    inputs.push([
-      x1 + (Math.random() - 0.5) * noiseLevel,
-      x2 + (Math.random() - 0.5) * noiseLevel,
-    ]);
-    outputs.push([xorResult]);
-  }
-  return { inputs, outputs };
-};
+  const serverCode = `// Chargement MNIST et distribution non-IID
+import { loadMNISTTrain, getClientDataSubset, oneHot } from './mnist';
 
-// Architecture MLP: 2 → 8 → 1 (ReLU + Sigmoid)
-const mlp = initializeMLPWeights(2, 8, 1);`;
+// Charger le dataset (60,000 images train, 10,000 test)
+const mnist = await loadMNISTTrain();
+// → { images: number[60000][784], labels: number[60000] }
+
+// Distribution non-IID: chaque client spécialisé sur 2-3 chiffres
+const clientData = getClientDataSubset(mnist, 'client-0', 400, true);
+// → { inputs: number[400][784], outputs: number[400][10] }
+
+// Architecture MLP: 784 → 128 → 10 (ReLU + Softmax)
+const mlp = initializeMLPWeights(784, 128, 10);
+
+// Forward pass avec softmax pour classification
+const { output } = forward(image, mlp);
+const predictedDigit = output.indexOf(Math.max(...output));`;
+
 
   return (
     <Card className="bg-gradient-card border-border shadow-card">
