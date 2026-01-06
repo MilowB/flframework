@@ -12,7 +12,8 @@ import {
   MNIST_HIDDEN_SIZE,
   MNIST_OUTPUT_SIZE
 } from './mlp';
-import { loadMNISTTrain, getClientDataSubset, MNISTData } from './mnist';
+import { loadMNISTTrain, loadMNISTTest, getClientDataSubset, oneHot, MNISTData } from './mnist';
+import { forward, computeLoss, computeAccuracy as computeMLPAccuracy } from './mlp';
 
 // Compute weights statistics for visualization
 const computeWeightsSnapshot = (model: ModelWeights): WeightsSnapshot => {
@@ -41,12 +42,50 @@ const computeWeightsSnapshot = (model: ModelWeights): WeightsSnapshot => {
 const mlpWeightsStore: Map<string, MLPWeights> = new Map();
 const clientDataStore: Map<string, { inputs: number[][]; outputs: number[][] }> = new Map();
 let mnistTrainData: MNISTData | null = null;
+let mnistTestData: MNISTData | null = null;
 
-// Preload MNIST data
+// Preload MNIST data (train + test)
 export const preloadMNIST = async (): Promise<void> => {
+  const promises: Promise<void>[] = [];
   if (!mnistTrainData) {
-    mnistTrainData = await loadMNISTTrain();
+    promises.push(loadMNISTTrain().then(data => { mnistTrainData = data; }));
   }
+  if (!mnistTestData) {
+    promises.push(loadMNISTTest().then(data => { mnistTestData = data; }));
+  }
+  await Promise.all(promises);
+};
+
+// Evaluate global model on test set
+export const evaluateOnTestSet = (globalModel: { layers: number[][]; bias: number[] }): { loss: number; accuracy: number } => {
+  if (!mnistTestData) {
+    return { loss: 0, accuracy: 0 };
+  }
+  
+  const mlpWeights = unflattenWeights(
+    globalModel,
+    MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
+  );
+  
+  let totalLoss = 0;
+  let correct = 0;
+  
+  for (let i = 0; i < mnistTestData.images.length; i++) {
+    const { output } = forward(mnistTestData.images[i], mlpWeights);
+    const target = oneHot(mnistTestData.labels[i]);
+    
+    totalLoss += computeLoss(output, target);
+    
+    const predicted = output.indexOf(Math.max(...output));
+    if (predicted === mnistTestData.labels[i]) {
+      correct++;
+    }
+  }
+  
+  return {
+    loss: totalLoss / mnistTestData.images.length,
+    accuracy: correct / mnistTestData.images.length,
+  };
 };
 
 // Initialize random model weights (using real MLP for MNIST)
@@ -218,9 +257,8 @@ export const runFederatedRound = async (
   const newGlobalModel = aggregationFn(clientResults);
   const aggregationTime = Date.now() - aggregationStart;
 
-  // Calculate global metrics
-  const avgLoss = results.reduce((sum, r) => sum + r.loss, 0) / results.length;
-  const avgAccuracy = results.reduce((sum, r) => sum + r.accuracy, 0) / results.length;
+  // Evaluate global model on test set
+  const testMetrics = evaluateOnTestSet(newGlobalModel);
 
   // Reset completed clients to idle
   setTimeout(() => {
@@ -231,8 +269,8 @@ export const runFederatedRound = async (
 
   const roundMetrics: RoundMetrics = {
     round: currentRound,
-    globalLoss: avgLoss,
-    globalAccuracy: avgAccuracy,
+    globalLoss: testMetrics.loss,
+    globalAccuracy: testMetrics.accuracy,
     participatingClients: participatingIds,
     aggregationTime,
     timestamp: Date.now(),
