@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { FederatedState, ClientState, ServerConfig } from '@/lib/federated/types';
-import { initializeModel, createClient, runFederatedRound } from '@/lib/federated/simulation';
+import { initializeModel, createClient, runFederatedRound, preloadMNIST } from '@/lib/federated/simulation';
 
 const defaultServerConfig: ServerConfig = {
   aggregationMethod: 'fedavg',
@@ -21,7 +21,16 @@ export const useFederatedLearning = (initialClients: number = 5) => {
     globalModel: null,
   }));
 
+  const [mnistLoaded, setMnistLoaded] = useState(false);
   const abortRef = useRef(false);
+
+  // Preload MNIST on mount
+  useEffect(() => {
+    preloadMNIST().then(() => {
+      setMnistLoaded(true);
+      console.log('MNIST dataset ready');
+    });
+  }, []);
 
   const updateClient = useCallback((clientId: string, update: Partial<ClientState>) => {
     setState(prev => ({
@@ -131,6 +140,7 @@ export const useFederatedLearning = (initialClients: number = 5) => {
 
   return {
     state,
+    mnistLoaded,
     startTraining,
     stopTraining,
     resetTraining,
