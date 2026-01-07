@@ -17,10 +17,11 @@ export interface ClientConfig {
 export interface ClientState {
   id: string;
   name: string;
-  status: 'idle' | 'receiving' | 'training' | 'sending' | 'completed' | 'error';
+  status: 'idle' | 'receiving' | 'training' | 'sending' | 'completed' | 'error' | 'evaluating';
   progress: number;
   localLoss: number;
   localAccuracy: number;
+  localTestAccuracy: number; // Accuracy on client's personalized test set
   dataSize: number;
   lastUpdate: number;
   roundsParticipated: number;
