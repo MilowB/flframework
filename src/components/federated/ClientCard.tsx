@@ -120,7 +120,7 @@ export const ClientCard = ({ client }: ClientCardProps) => {
           )}
 
           {/* Metrics */}
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/50">
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/50">
             <div className="text-center">
               <Database className="w-3 h-3 mx-auto mb-1 text-muted-foreground" />
               <p className="text-xs font-mono text-muted-foreground">
@@ -133,10 +133,23 @@ export const ClientCard = ({ client }: ClientCardProps) => {
                 {client.localLoss > 0 ? client.localLoss.toFixed(3) : '—'}
               </p>
             </div>
+          </div>
+
+          {/* Test Accuracy (prominent display) */}
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/50">
             <div className="text-center">
-              <p className="text-xs text-muted-foreground mb-0.5">Acc</p>
+              <p className="text-xs text-muted-foreground mb-0.5">Train Acc</p>
               <p className="text-xs font-mono text-foreground">
                 {client.localAccuracy > 0 ? `${(client.localAccuracy * 100).toFixed(1)}%` : '—'}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-0.5">Test Acc</p>
+              <p className={cn(
+                'text-xs font-mono font-semibold',
+                client.localTestAccuracy > 0 ? 'text-success' : 'text-foreground'
+              )}>
+                {client.localTestAccuracy > 0 ? `${(client.localTestAccuracy * 100).toFixed(1)}%` : '—'}
               </p>
             </div>
           </div>

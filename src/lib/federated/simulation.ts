@@ -271,6 +271,7 @@ const computeWeightsSnapshot = (model: ModelWeights): WeightsSnapshot => {
 // Store MLP weights and MNIST data
 const mlpWeightsStore: Map<string, MLPWeights> = new Map();
 const clientDataStore: Map<string, { inputs: number[][]; outputs: number[][] }> = new Map();
+const clientTestDataStore: Map<string, { inputs: number[][]; outputs: number[][] }> = new Map();
 let mnistTrainData: MNISTData | null = null;
 let mnistTestData: MNISTData | null = null;
 // Store per-client model to send (cluster-averaged). Keyed by client id.
@@ -360,17 +361,42 @@ export const createClient = (index: number): ClientState => ({
   progress: 0,
   localLoss: 0,
   localAccuracy: 0,
+  localTestAccuracy: 0,
   dataSize: Math.floor(Math.random() * 400) + 200, // 200-600 MNIST samples per client
   lastUpdate: Date.now(),
   roundsParticipated: 0,
 });
 
+// Generate client-specific test data that mimics training distribution
+export const generateClientTestData = (clientId: string, trainDataSize: number): void => {
+  if (clientTestDataStore.has(clientId) || !mnistTestData) return;
+  
+  // Use ~20% of training size for test, minimum 50 samples
+  const testSize = Math.max(50, Math.floor(trainDataSize * 0.2));
+  
+  // Use same non-IID distribution logic but with test data
+  const testSubset = getClientDataSubset(mnistTestData, clientId, testSize, true);
+  clientTestDataStore.set(clientId, testSubset);
+};
+
+// Evaluate local model on client's personalized test set
+export const evaluateClientOnTestSet = (
+  clientId: string,
+  localMLP: MLPWeights
+): number => {
+  const testData = clientTestDataStore.get(clientId);
+  if (!testData) return 0;
+  
+  return computeAccuracy(testData.inputs, testData.outputs, localMLP);
+};
+
 // Real client training with MLP on MNIST data
 export const simulateClientTraining = async (
   client: ClientState,
   globalModel: ModelWeights,
-  onProgress: (progress: number) => void
-): Promise<{ weights: ModelWeights; loss: number; accuracy: number }> => {
+  onProgress: (progress: number) => void,
+  onStatusUpdate?: (status: 'training' | 'evaluating') => void
+): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number }> => {
   // Ensure MNIST is loaded
   if (!mnistTrainData) {
     mnistTrainData = await loadMNISTTrain();
@@ -389,6 +415,12 @@ export const simulateClientTraining = async (
   if (!clientDataStore.has(client.id)) {
     clientDataStore.set(client.id, getClientDataSubset(mnistTrainData, client.id, client.dataSize, true));
   }
+  
+  // Generate client-specific test data if not already done
+  if (!clientTestDataStore.has(client.id) && mnistTestData) {
+    generateClientTestData(client.id, client.dataSize);
+  }
+  
   const { inputs, outputs } = clientDataStore.get(client.id)!;
   
   // Training configuration for MNIST
@@ -409,6 +441,11 @@ export const simulateClientTraining = async (
     onProgress(((epoch + 1) / localEpochs) * 100);
   }
   
+  // Evaluate on personalized test set
+  onStatusUpdate?.('evaluating');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const testAccuracy = evaluateClientOnTestSet(client.id, localMLP);
+  
   // Convert back to flat format
   const flat = flattenWeights(localMLP);
   
@@ -420,6 +457,7 @@ export const simulateClientTraining = async (
     },
     loss,
     accuracy,
+    testAccuracy,
   };
 };
 
@@ -473,7 +511,8 @@ export const runFederatedRound = async (
     const result = await simulateClientTraining(
       client,
       modelToSend,
-      (progress) => onClientUpdate(client.id, { progress })
+      (progress) => onClientUpdate(client.id, { progress }),
+      (status) => onClientUpdate(client.id, { status })
     );
 
     onClientUpdate(client.id, {
@@ -481,6 +520,7 @@ export const runFederatedRound = async (
       progress: 100,
       localLoss: result.loss,
       localAccuracy: result.accuracy,
+      localTestAccuracy: result.testAccuracy,
     });
 
     return { result, client };
