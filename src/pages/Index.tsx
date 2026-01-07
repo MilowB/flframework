@@ -7,6 +7,7 @@ import { ControlPanel } from '@/components/federated/ControlPanel';
 import { NetworkVisualization } from '@/components/federated/NetworkVisualization';
 import { RoundHistory } from '@/components/federated/RoundHistory';
 import { CodePreview } from '@/components/federated/CodePreview';
+import { ExperimentControls } from '@/components/federated/ExperimentControls';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Network, LayoutGrid, Code } from 'lucide-react';
@@ -15,11 +16,13 @@ const Index = () => {
   const {
     state,
     mnistLoaded,
+    clientModels,
     startTraining,
     stopTraining,
     resetTraining,
     setClientCount,
     updateServerConfig,
+    loadExperiment,
   } = useFederatedLearning(6);
 
   return (
@@ -38,6 +41,14 @@ const Index = () => {
               <p className="text-sm text-muted-foreground">
                 MNIST Classification — {mnistLoaded ? '60,000 images chargées' : 'Chargement MNIST...'}
               </p>
+            </div>
+            <div className="ml-auto">
+              <ExperimentControls
+                state={state}
+                clientModels={clientModels}
+                onLoad={loadExperiment}
+                disabled={state.isRunning}
+              />
             </div>
           </div>
         </div>

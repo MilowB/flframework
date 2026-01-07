@@ -274,7 +274,18 @@ const clientDataStore: Map<string, { inputs: number[][]; outputs: number[][] }> 
 let mnistTrainData: MNISTData | null = null;
 let mnistTestData: MNISTData | null = null;
 // Store per-client model to send (cluster-averaged). Keyed by client id.
-const clusterModelStore: Map<string, ModelWeights> = new Map();
+export const clusterModelStore: Map<string, ModelWeights> = new Map();
+
+// Getter for client models (used by save feature)
+export const getClientModels = (): Map<string, ModelWeights> => {
+  return new Map(clusterModelStore);
+};
+
+// Setter for client models (used by load feature)
+export const setClientModels = (models: Map<string, ModelWeights>): void => {
+  clusterModelStore.clear();
+  models.forEach((value, key) => clusterModelStore.set(key, value));
+};
 
 // Preload MNIST data (train + test)
 export const preloadMNIST = async (): Promise<void> => {
@@ -605,8 +616,8 @@ export const runFederatedRound = async (
     }
   } catch (err) {
     console.warn('Clustering failed:', err);
-    var distanceMatrixForRound = undefined;
-    var clustersForRound = undefined;
+    distanceMatrixForRound = undefined;
+    clustersForRound = undefined;
   }
 
   onServerStatusUpdate('evaluating');

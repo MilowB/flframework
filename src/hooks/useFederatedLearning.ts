@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FederatedState, ClientState, ServerConfig, ServerStatus } from '@/lib/federated/types';
-import { initializeModel, createClient, runFederatedRound, preloadMNIST } from '@/lib/federated/simulation';
+import { FederatedState, ClientState, ServerConfig, ServerStatus, ModelWeights } from '@/lib/federated/types';
+import { initializeModel, createClient, runFederatedRound, preloadMNIST, getClientModels, setClientModels } from '@/lib/federated/simulation';
+import { ExperimentData } from '@/lib/federated/experimentStorage';
 
 const defaultServerConfig: ServerConfig = {
   aggregationMethod: 'fedavg',
@@ -157,9 +158,32 @@ export const useFederatedLearning = (initialClients: number = 5) => {
     }));
   }, []);
 
+  const loadExperiment = useCallback((data: ExperimentData) => {
+    abortRef.current = true;
+    
+    // Restore client models
+    const clientModelsMap = new Map<string, ModelWeights>();
+    data.clientModels.forEach(({ clientId, weights }) => {
+      clientModelsMap.set(clientId, weights);
+    });
+    setClientModels(clientModelsMap);
+    
+    setState(prev => ({
+      ...prev,
+      isRunning: false,
+      serverConfig: data.serverConfig,
+      globalModel: data.globalModel,
+      roundHistory: data.roundHistory,
+      currentRound: data.roundHistory.length,
+      totalRounds: data.serverConfig.totalRounds,
+      serverStatus: 'idle' as ServerStatus,
+    }));
+  }, []);
+
   return {
     state,
     mnistLoaded,
+    clientModels: getClientModels(),
     startTraining,
     stopTraining,
     resetTraining,
@@ -167,5 +191,6 @@ export const useFederatedLearning = (initialClients: number = 5) => {
     setClientCount,
     updateServerConfig,
     updateClient,
+    loadExperiment,
   };
 };
