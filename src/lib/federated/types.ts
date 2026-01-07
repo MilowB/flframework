@@ -44,6 +44,12 @@ export interface WeightsSnapshot {
   b2Mean: number;
 }
 
+export interface ClusterMetrics {
+  clusterId: number;
+  accuracy: number;
+  clientIds: string[];
+}
+
 export interface RoundMetrics {
   round: number;
   globalLoss: number;
@@ -58,6 +64,8 @@ export interface RoundMetrics {
   clusters?: string[][];
   // Average silhouette score across clusters for this round (range -1..1)
   silhouetteAvg?: number;
+  // Accuracy of each cluster's averaged model on pooled test data
+  clusterMetrics?: ClusterMetrics[];
 }
 
 export type ServerStatus = 'idle' | 'sending' | 'waiting' | 'receiving' | 'evaluating' | 'completed';

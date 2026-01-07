@@ -1,4 +1,4 @@
-import { ModelWeights, ClientState, RoundMetrics, FederatedState, WeightsSnapshot, ServerStatus } from './types';
+import { ModelWeights, ClientState, RoundMetrics, FederatedState, WeightsSnapshot, ServerStatus, ClusterMetrics } from './types';
 import { aggregationMethods } from './aggregations';
 import { 
   initializeMLPWeights, 
@@ -390,6 +390,33 @@ export const evaluateClientOnTestSet = (
   return computeAccuracy(testData.inputs, testData.outputs, localMLP);
 };
 
+// Evaluate a cluster model on pooled test data from all clients in the cluster
+export const evaluateClusterModel = (
+  clusterClientIds: string[],
+  clusterModel: ModelWeights
+): number => {
+  const mlpWeights = unflattenWeights(
+    { layers: clusterModel.layers, bias: clusterModel.bias },
+    MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
+  );
+  
+  // Pool test data from all clients in the cluster
+  const allInputs: number[][] = [];
+  const allOutputs: number[][] = [];
+  
+  for (const clientId of clusterClientIds) {
+    const testData = clientTestDataStore.get(clientId);
+    if (testData) {
+      allInputs.push(...testData.inputs);
+      allOutputs.push(...testData.outputs);
+    }
+  }
+  
+  if (allInputs.length === 0) return 0;
+  
+  return computeAccuracy(allInputs, allOutputs, mlpWeights);
+};
+
 // Real client training with MLP on MNIST data
 export const simulateClientTraining = async (
   client: ClientState,
@@ -550,6 +577,7 @@ export const runFederatedRound = async (
   // declare silhouette outside the clustering try-block so it's available
   // when constructing round metrics (avoid ReferenceError from block scope)
   let silhouetteAvgForRound: number | undefined = undefined;
+  let clusterMetricsForRound: ClusterMetrics[] = [];
 
   try {
     const clientResultsWithIds = trainedClients.map(({ result, client }) => ({ id: client.id, weights: result.weights, dataSize: client.dataSize }));
@@ -614,10 +642,12 @@ export const runFederatedRound = async (
     }
     
     // Build cluster-averaged models (FedAvg per cluster) and store per-client model
+    // Also evaluate each cluster model
     try {
       const clientMap = new Map(clientResultsWithIds.map(c => [c.id, c] as [string, typeof c]));
       if (clustersForRound && clustersForRound.length > 0) {
-        for (const grp of clustersForRound) {
+        for (let clusterIdx = 0; clusterIdx < clustersForRound.length; clusterIdx++) {
+          const grp = clustersForRound[clusterIdx];
           // gather valid entries for this cluster
           const entries = grp.map(id => clientMap.get(id)).filter(Boolean) as { id: string; weights: ModelWeights; dataSize: number }[];
           if (entries.length === 0) continue;
@@ -649,6 +679,14 @@ export const runFederatedRound = async (
           for (const e of entries) {
             clusterModelStore.set(e.id, averagedModel);
           }
+
+          // Evaluate cluster model on pooled test data
+          const clusterAccuracy = evaluateClusterModel(grp, averagedModel);
+          clusterMetricsForRound.push({
+            clusterId: clusterIdx,
+            accuracy: clusterAccuracy,
+            clientIds: grp,
+          });
         }
       }
     } catch (err) {
@@ -690,6 +728,7 @@ export const runFederatedRound = async (
     distanceMatrix: distanceMatrixForRound,
     clusters: clustersForRound,
     silhouetteAvg: silhouetteAvgForRound,
+    clusterMetrics: clusterMetricsForRound.length > 0 ? clusterMetricsForRound : undefined,
   };
 
   onStateUpdate({
