@@ -101,6 +101,9 @@ export const oneHot = (label: number, numClasses: number = 10): number[] => {
   return encoded;
 };
 
+// Map to store assigned primary label per client pair so assignments are stable
+const pairLabelMap: Map<number, number> = new Map();
+
 // Get a random subset of MNIST for a client (non-IID simulation)
 export const getClientDataSubset = (
   data: MNISTData,
@@ -112,32 +115,81 @@ export const getClientDataSubset = (
   const outputs: number[][] = [];
   
   if (nonIID) {
-    // Non-IID: each client specializes in 2-3 digits
-    const hash = clientId.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-    const primaryDigits = [hash % 10, (hash + 3) % 10, (hash + 7) % 10];
-    
-    // 70% from primary digits, 30% random
+    // Non-IID: new rule — each client has 70% of its train data of ONE label
+    // that it shares with exactly one other client (paired clients).
+    // Determine numeric client index (clients are named `client-N` in simulation).
+    let clientIndex = 0;
+    const m = clientId.match(/client-(\d+)/);
+    if (m) clientIndex = Number(m[1]);
+    else clientIndex = clientId.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7) & 0xffffffff;
+
+    // Pairing: partners are (0,1), (2,3), ... partner = clientIndex ^ 1
+    const pairIndex = Math.floor(clientIndex / 2);
+
+    // Ensure each pair gets a primary label. Try to assign labels 0..9 uniquely to pairs
+    // until labels are exhausted. If there are more than 10 pairs, labels will be reused
+    // (unavoidable given 10 digits); we keep assignments stable in `pairLabelMap`.
+    let primaryLabel: number;
+    if (pairLabelMap.has(pairIndex)) {
+      primaryLabel = pairLabelMap.get(pairIndex)!;
+    } else {
+      // find an unused label
+      const used = new Set(Array.from(pairLabelMap.values()));
+      let found = -1;
+      for (let l = 0; l < 10; l++) {
+        if (!used.has(l)) { found = l; break; }
+      }
+      if (found === -1) {
+        // all labels used; fallback to deterministic choice
+        found = pairIndex % 10;
+        console.warn(`All labels already assigned to pairs; reusing label ${found} for pair ${pairIndex}`);
+      }
+      pairLabelMap.set(pairIndex, found);
+      primaryLabel = found;
+    }
+
+    const primaryDigits = [primaryLabel];
+
+    // 70% from primary label, 30% random
     const primaryCount = Math.floor(numSamples * 0.7);
     const randomCount = numSamples - primaryCount;
-    
-    // Find indices for primary digits
+
+    // deterministic pseudo-random shuffle using clientIndex as seed
+    const seededShuffle = <T,>(arr: T[], seed: number) => {
+      const a = arr.slice();
+      let s = seed >>> 0;
+      const rnd = () => {
+        // xorshift32
+        s ^= s << 13;
+        s ^= s >>> 17;
+        s ^= s << 5;
+        return (s >>> 0) / 4294967295;
+      };
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+      }
+      return a;
+    };
+
+    // Find indices for primary label
     const primaryIndices = data.labels
-      .map((label, idx) => primaryDigits.includes(label) ? idx : -1)
+      .map((label, idx) => label === primaryLabel ? idx : -1)
       .filter(idx => idx !== -1);
-    
-    // Shuffle and take
-    const shuffledPrimary = primaryIndices.sort(() => Math.random() - 0.5);
+
+    const shuffledPrimary = seededShuffle(primaryIndices, clientIndex + 1);
     for (let i = 0; i < Math.min(primaryCount, shuffledPrimary.length); i++) {
       const idx = shuffledPrimary[i];
       inputs.push(data.images[idx]);
       outputs.push(oneHot(data.labels[idx]));
     }
-    
-    // Random samples
-    const randomIndices = Array.from({ length: data.labels.length }, (_, i) => i)
-      .sort(() => Math.random() - 0.5);
-    for (let i = 0; i < randomCount && inputs.length < numSamples; i++) {
-      const idx = randomIndices[i];
+
+    // Random samples (avoid taking too many from primaryIndices again)
+    const allIndices = Array.from({ length: data.labels.length }, (_, i) => i);
+    const shuffledAll = seededShuffle(allIndices, clientIndex + 12345);
+    for (let i = 0; i < shuffledAll.length && inputs.length < numSamples; i++) {
+      const idx = shuffledAll[i];
+      // allow repetition of primary label in the random tail as well, it's fine
       inputs.push(data.images[idx]);
       outputs.push(oneHot(data.labels[idx]));
     }

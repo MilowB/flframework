@@ -4,8 +4,8 @@ import { initializeModel, createClient, runFederatedRound, preloadMNIST } from '
 
 const defaultServerConfig: ServerConfig = {
   aggregationMethod: 'fedavg',
-  clientsPerRound: 3,
-  totalRounds: 10,
+  clientsPerRound: 6,
+  totalRounds: 5,
   minClientsRequired: 2,
   modelArchitecture: 'mlp-small',
 };

@@ -51,6 +51,10 @@ export interface RoundMetrics {
   aggregationTime: number;
   timestamp: number;
   weightsSnapshot?: WeightsSnapshot;
+  // Distance matrix (L2) between client models for this round (NxN)
+  distanceMatrix?: number[][];
+  // Clusters obtained from community detection (arrays of client ids)
+  clusters?: string[][];
 }
 
 export type ServerStatus = 'idle' | 'sending' | 'waiting' | 'receiving' | 'evaluating' | 'completed';

@@ -2,6 +2,7 @@ import { RoundMetrics } from '@/lib/federated/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { TrendingDown, TrendingUp } from 'lucide-react';
+import SimilarityMatrix from './SimilarityMatrix';
 
 interface MetricsChartProps {
   history: RoundMetrics[];
@@ -119,6 +120,8 @@ export const MetricsChart = ({ history }: MetricsChartProps) => {
                 </LineChart>
               </ResponsiveContainer>
             </div>
+              {/* Similarity matrix panel */}
+              <SimilarityMatrix history={history} />
           </>
         )}
       </CardContent>
