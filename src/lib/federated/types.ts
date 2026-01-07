@@ -55,6 +55,8 @@ export interface RoundMetrics {
   distanceMatrix?: number[][];
   // Clusters obtained from community detection (arrays of client ids)
   clusters?: string[][];
+  // Average silhouette score across clusters for this round (range -1..1)
+  silhouetteAvg?: number;
 }
 
 export type ServerStatus = 'idle' | 'sending' | 'waiting' | 'receiving' | 'evaluating' | 'completed';

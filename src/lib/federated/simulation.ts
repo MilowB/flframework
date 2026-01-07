@@ -496,6 +496,10 @@ export const runFederatedRound = async (
 
   // Phase 4: Aggregation and Evaluation
   // Compute distance matrix between client models and cluster them
+  // declare silhouette outside the clustering try-block so it's available
+  // when constructing round metrics (avoid ReferenceError from block scope)
+  let silhouetteAvgForRound: number | undefined = undefined;
+
   try {
     const clientResultsWithIds = trainedClients.map(({ result, client }) => ({ id: client.id, weights: result.weights, dataSize: client.dataSize }));
     const clustering = clusterClientModels(clientResultsWithIds as any);
@@ -503,6 +507,60 @@ export const runFederatedRound = async (
     // we'll store clustering.distanceMatrix and clustering.clusters
     var distanceMatrixForRound = clustering.distanceMatrix;
     var clustersForRound = clustering.clusters;
+    // compute silhouette scores if distance matrix and clusters available
+    try {
+      const D = distanceMatrixForRound;
+      const clusters = clustersForRound;
+      if (D && clusters && clusters.length > 0) {
+        // build id->index map based on clientResultsWithIds order
+        const idToIndex = new Map<string, number>();
+        for (let i = 0; i < clientResultsWithIds.length; i++) idToIndex.set(clientResultsWithIds[i].id, i);
+
+        const clusterMeans: number[] = [];
+        for (const grp of clusters) {
+          const sList: number[] = [];
+          for (const id of grp) {
+            const i = idToIndex.get(id);
+            if (i === undefined) continue;
+            // a = average distance to other points in same cluster
+            const others = grp.map(x => idToIndex.get(x)).filter((x): x is number => typeof x === 'number' && x !== i);
+            let a = 0;
+            if (others.length > 0) {
+              let sum = 0;
+              for (const j of others) sum += D[i][j];
+              a = sum / others.length;
+            } else {
+              a = 0; // single-member cluster
+            }
+
+            // b = min average distance to points in other clusters
+            let b = Infinity;
+            for (const otherGrp of clusters) {
+              if (otherGrp === grp) continue;
+              const members = otherGrp.map(x => idToIndex.get(x)).filter((x): x is number => typeof x === 'number');
+              if (members.length === 0) continue;
+              let sum = 0;
+              for (const j of members) sum += D[i][j];
+              const avg = sum / members.length;
+              if (avg < b) b = avg;
+            }
+            if (!isFinite(b)) b = a; // no other clusters
+
+            const denom = Math.max(a, b);
+            const s = denom > 0 ? (b - a) / denom : 0;
+            sList.push(s);
+          }
+          // mean silhouette for this cluster
+          const clusterMean = sList.length > 0 ? sList.reduce((u, v) => u + v, 0) / sList.length : 0;
+          clusterMeans.push(clusterMean);
+        }
+        // average across clusters
+        silhouetteAvgForRound = clusterMeans.length > 0 ? clusterMeans.reduce((u, v) => u + v, 0) / clusterMeans.length : undefined;
+      }
+    } catch (err) {
+      console.warn('Failed to compute silhouette:', err);
+      silhouetteAvgForRound = undefined;
+    }
     
     // Build cluster-averaged models (FedAvg per cluster) and store per-client model
     try {
@@ -580,6 +638,7 @@ export const runFederatedRound = async (
     weightsSnapshot: computeWeightsSnapshot(newGlobalModel),
     distanceMatrix: distanceMatrixForRound,
     clusters: clustersForRound,
+    silhouetteAvg: silhouetteAvgForRound,
   };
 
   onStateUpdate({

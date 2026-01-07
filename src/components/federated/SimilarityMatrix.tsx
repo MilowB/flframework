@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { RoundMetrics } from '@/lib/federated/types';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface SimilarityMatrixProps {
 	history: RoundMetrics[];
@@ -165,6 +166,24 @@ export const SimilarityMatrix = ({ history }: SimilarityMatrixProps) => {
 							<div className="text-xs">50%</div>
 							<div className="text-xs">100%</div>
 						</div>
+					</div>
+				</div>
+
+				{/* Silhouette chart (moved below into its own panel) */}
+
+				{/* Silhouette panel placed below the similarity matrix */}
+				<div className="mt-4 p-3 rounded-lg bg-muted/20 border border-border">
+					<div className="mb-2 text-sm font-medium">Silhouette moyenne par round</div>
+					<div style={{ width: '100%', height: 120 }}>
+						<ResponsiveContainer width="100%" height="100%">
+							<LineChart data={history.map((h, i) => ({ round: i + 1, silhouette: (h.silhouetteAvg ?? 0) * 100 }))}>
+								<CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 18%)" />
+								<XAxis dataKey="round" stroke="hsl(215, 20%, 55%)" tick={{ fontSize: 12 }} />
+								<YAxis stroke="hsl(215, 20%, 55%)" tick={{ fontSize: 12 }} unit="%" />
+								<Tooltip formatter={(v: number) => `${v.toFixed(2)}%`} />
+								<Line type="monotone" dataKey="silhouette" stroke="#8884d8" strokeWidth={2} dot={{ r: 3 }} />
+							</LineChart>
+						</ResponsiveContainer>
 					</div>
 				</div>
 			</div>
