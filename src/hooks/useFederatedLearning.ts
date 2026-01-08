@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { FederatedState, ClientState, ServerConfig, ServerStatus, ModelWeights } from '@/lib/federated/types';
-import { initializeModel, createClient, runFederatedRound, preloadMNIST, getClientModels, setClientModels } from '@/lib/federated/simulation';
+import { initializeModel, createClient, runFederatedRound, preloadMNIST, getClientModels, setClientModels, setSeed } from '@/lib/federated/simulation';
 import { ExperimentData } from '@/lib/federated/experimentStorage';
 
 const defaultServerConfig: ServerConfig = {
@@ -9,6 +9,7 @@ const defaultServerConfig: ServerConfig = {
   totalRounds: 5,
   minClientsRequired: 2,
   modelArchitecture: 'mlp-small',
+  seed: 42,
 };
 
 export const useFederatedLearning = (initialClients: number = 5) => {
@@ -54,13 +55,17 @@ export const useFederatedLearning = (initialClients: number = 5) => {
   }, []);
 
   const initializeTraining = useCallback(() => {
+    // Set the seed before initializing model and clients
+    setSeed(state.serverConfig.seed ?? 42);
     const model = initializeModel(state.serverConfig.modelArchitecture);
+    // Recreate clients with seeded dataSize
+    const newClients = Array.from({ length: state.clients.length }, (_, i) => createClient(i));
     setState(prev => ({
       ...prev,
       globalModel: model,
       currentRound: 0,
       roundHistory: [],
-      clients: prev.clients.map(c => ({
+      clients: newClients.map(c => ({
         ...c,
         status: 'idle' as const,
         progress: 0,
@@ -69,7 +74,7 @@ export const useFederatedLearning = (initialClients: number = 5) => {
         roundsParticipated: 0,
       })),
     }));
-  }, [state.serverConfig.modelArchitecture]);
+  }, [state.serverConfig.modelArchitecture, state.serverConfig.seed, state.clients.length]);
 
   const updateServerStatus = useCallback((status: ServerStatus) => {
     setState(prev => ({ ...prev, serverStatus: status }));
@@ -174,6 +179,9 @@ export const useFederatedLearning = (initialClients: number = 5) => {
 
   const loadExperiment = useCallback((data: ExperimentData) => {
     abortRef.current = true;
+    
+    // Restore the seed from the saved config
+    setSeed(data.serverConfig.seed ?? 42);
     
     // Restore client models
     const clientModelsMap = new Map<string, ModelWeights>();

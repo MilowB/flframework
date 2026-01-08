@@ -2,9 +2,11 @@ import { ModelWeights, ClientState, RoundMetrics, FederatedState, WeightsSnapsho
 import { aggregationMethods } from './aggregations';
 import { 
   initializeMLPWeights, 
+  initializeMLPWeightsWithRng,
   flattenWeights, 
   unflattenWeights, 
   trainEpoch,
+  trainEpochWithRng,
   computeAccuracy,
   cloneWeights,
   MLPWeights,
@@ -14,6 +16,50 @@ import {
 } from './mlp';
 import { loadMNISTTrain, loadMNISTTest, getClientDataSubset, oneHot, MNISTData } from './mnist';
 import { forward, computeLoss, computeAccuracy as computeMLPAccuracy } from './mlp';
+
+// ============= Seeded Random Number Generator =============
+// Xorshift32 PRNG for deterministic randomness
+export class SeededRandom {
+  private state: number;
+  
+  constructor(seed: number) {
+    this.state = seed >>> 0 || 1;
+  }
+  
+  // Returns a number in [0, 1)
+  next(): number {
+    this.state ^= this.state << 13;
+    this.state ^= this.state >>> 17;
+    this.state ^= this.state << 5;
+    return (this.state >>> 0) / 4294967296;
+  }
+  
+  // Returns an integer in [0, max)
+  nextInt(max: number): number {
+    return Math.floor(this.next() * max);
+  }
+  
+  // Shuffle an array in place
+  shuffle<T>(arr: T[]): T[] {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = this.nextInt(i + 1);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+}
+
+// Global RNG instance, reset when simulation starts
+let globalRng: SeededRandom = new SeededRandom(42);
+let currentSeed: number = 42;
+
+export const setSeed = (seed: number): void => {
+  currentSeed = seed;
+  globalRng = new SeededRandom(seed);
+};
+
+export const getRng = (): SeededRandom => globalRng;
+export const getSeed = (): number => currentSeed;
 
 // --- Clustering utilities: compute L2 distances and perform community detection
 // We'll convert distances to similarity weights and run a Louvain-like
@@ -332,12 +378,19 @@ export const evaluateOnTestSet = (globalModel: { layers: number[][]; bias: numbe
   };
 };
 
-// Initialize random model weights (using real MLP for MNIST)
+// Initialize random model weights (using real MLP for MNIST) with seeded RNG
 export const initializeModel = (architecture: string): ModelWeights => {
-  const mlpWeights = initializeMLPWeights(MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
+  const rng = getRng();
+  const mlpWeights = initializeMLPWeightsWithRng(
+    () => rng.next(),
+    MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
+  );
   mlpWeightsStore.set('global', mlpWeights);
   // clear any stored cluster models when initializing
   clusterModelStore.clear();
+  // Clear client data stores so they get regenerated with new seed
+  clientDataStore.clear();
+  clientTestDataStore.clear();
   
   const flat = flattenWeights(mlpWeights);
   return {
@@ -354,18 +407,21 @@ const clientNames = [
   'Unit Iota', 'Branch Kappa', 'Site Lambda', 'Post Mu',
 ];
 
-export const createClient = (index: number): ClientState => ({
-  id: `client-${index}`,
-  name: clientNames[index % clientNames.length] || `Client ${index + 1}`,
-  status: 'idle',
-  progress: 0,
-  localLoss: 0,
-  localAccuracy: 0,
-  localTestAccuracy: 0,
-  dataSize: Math.floor(Math.random() * 400) + 200, // 200-600 MNIST samples per client
-  lastUpdate: Date.now(),
-  roundsParticipated: 0,
-});
+export const createClient = (index: number): ClientState => {
+  const rng = getRng();
+  return {
+    id: `client-${index}`,
+    name: clientNames[index % clientNames.length] || `Client ${index + 1}`,
+    status: 'idle',
+    progress: 0,
+    localLoss: 0,
+    localAccuracy: 0,
+    localTestAccuracy: 0,
+    dataSize: Math.floor(rng.next() * 400) + 200, // 200-600 MNIST samples per client
+    lastUpdate: Date.now(),
+    roundsParticipated: 0,
+  };
+};
 
 // Generate client-specific test data that mimics training distribution
 export const generateClientTestData = (clientId: string, trainDataSize: number): void => {
@@ -374,8 +430,8 @@ export const generateClientTestData = (clientId: string, trainDataSize: number):
   // Use ~20% of training size for test, minimum 50 samples
   const testSize = Math.max(50, Math.floor(trainDataSize * 0.2));
   
-  // Use same non-IID distribution logic but with test data
-  const testSubset = getClientDataSubset(mnistTestData, clientId, testSize, true);
+  // Use same non-IID distribution logic but with test data (using global seed)
+  const testSubset = getClientDataSubset(mnistTestData, clientId, testSize, true, getSeed());
   clientTestDataStore.set(clientId, testSubset);
 };
 
@@ -438,30 +494,37 @@ export const simulateClientTraining = async (
   // --- 50/50 aggregation client-side ---
   // Si la config demande une agrégation client et qu'un modèle local existe, on fait la moyenne (FedAvg)
   if (client.lastLocalModel && client.clientAggregationMethod === '50-50') {
-    // On suppose que lastLocalModel est au format ModelWeights
     const prevMLP = unflattenWeights(
       { layers: client.lastLocalModel.layers, bias: client.lastLocalModel.bias },
       MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
     );
-    // Moyenne des poids
-    for (let l = 0; l < globalMLP.layers.length; l++) {
-      for (let i = 0; i < globalMLP.layers[l].length; i++) {
-        globalMLP.layers[l][i] = (globalMLP.layers[l][i] + prevMLP.layers[l][i]) / 2;
+    // Moyenne des poids W1
+    for (let i = 0; i < globalMLP.W1.length; i++) {
+      for (let j = 0; j < globalMLP.W1[i].length; j++) {
+        globalMLP.W1[i][j] = (globalMLP.W1[i][j] + prevMLP.W1[i][j]) / 2;
       }
     }
-    for (let i = 0; i < globalMLP.bias.length; i++) {
-      globalMLP.bias[i] = (globalMLP.bias[i] + prevMLP.bias[i]) / 2;
+    // Moyenne des poids W2
+    for (let i = 0; i < globalMLP.W2.length; i++) {
+      for (let j = 0; j < globalMLP.W2[i].length; j++) {
+        globalMLP.W2[i][j] = (globalMLP.W2[i][j] + prevMLP.W2[i][j]) / 2;
+      }
+    }
+    // Moyenne des biais
+    for (let i = 0; i < globalMLP.b1.length; i++) {
+      globalMLP.b1[i] = (globalMLP.b1[i] + prevMLP.b1[i]) / 2;
+    }
+    for (let i = 0; i < globalMLP.b2.length; i++) {
+      globalMLP.b2[i] = (globalMLP.b2[i] + prevMLP.b2[i]) / 2;
     }
   }
 
   // Clone weights for local training
   const localMLP = cloneWeights(globalMLP);
   
-  // Get or generate client-specific MNIST subset (non-IID)
+  // Get or generate client-specific MNIST subset (non-IID) using global seed
   if (!clientDataStore.has(client.id)) {
-    // Utilise la seed du serveur si disponible
-    const seed = (client.serverConfig?.seed ?? 42);
-    clientDataStore.set(client.id, getClientDataSubset(mnistTrainData, client.id, client.dataSize, true, seed));
+    clientDataStore.set(client.id, getClientDataSubset(mnistTrainData, client.id, client.dataSize, true, getSeed()));
   }
   
   // Generate client-specific test data if not already done
@@ -478,12 +541,13 @@ export const simulateClientTraining = async (
   let loss = 0;
   let accuracy = 0;
   
-  // Real training loop
+  // Real training loop with seeded RNG for shuffling
+  const rng = getRng();
   for (let epoch = 0; epoch < localEpochs; epoch++) {
     // Small delay to show progress
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    loss = trainEpoch(inputs, outputs, localMLP, learningRate);
+    loss = trainEpochWithRng(inputs, outputs, localMLP, learningRate, () => rng.next());
     accuracy = computeAccuracy(inputs, outputs, localMLP);
     
     onProgress(((epoch + 1) / localEpochs) * 100);
@@ -517,30 +581,19 @@ export const simulateClientTraining = async (
   };
 };
 
-// Select clients for this round
+// Select clients for this round using global seeded RNG
 export const selectClients = (
   clients: ClientState[],
   count: number
 ): ClientState[] => {
   const available = clients.filter(c => c.status === 'idle');
-  // Shuffle avec seed
-  const seed = (clients[0]?.serverConfig?.seed ?? 42);
-  const seededShuffle = <T,>(arr: T[], seed: number) => {
-    const a = arr.slice();
-    let s = seed >>> 0;
-    const rnd = () => {
-      s ^= s << 13;
-      s ^= s >>> 17;
-      s ^= s << 5;
-      return (s >>> 0) / 4294967295;
-    };
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(rnd() * (i + 1));
-      const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
-    }
-    return a;
-  };
-  const shuffled = seededShuffle(available, seed);
+  // Shuffle using global RNG
+  const rng = getRng();
+  const shuffled = available.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = rng.nextInt(i + 1);
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   return shuffled.slice(0, Math.min(count, shuffled.length));
 };
 
