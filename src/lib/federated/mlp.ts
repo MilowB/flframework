@@ -176,7 +176,7 @@ export const trainStep = (
   return { loss };
 };
 
-// Train on a batch of data
+// Train on a batch of data (uses Math.random for shuffling)
 export const trainEpoch = (
   inputs: number[][],
   outputs: number[][],
@@ -198,6 +198,53 @@ export const trainEpoch = (
   }
   
   return totalLoss / inputs.length;
+};
+
+// Train on a batch of data with a custom RNG for deterministic shuffling
+export const trainEpochWithRng = (
+  inputs: number[][],
+  outputs: number[][],
+  weights: MLPWeights,
+  learningRate: number,
+  rngNext: () => number
+): number => {
+  let totalLoss = 0;
+  
+  // Shuffle indices using provided RNG
+  const indices = Array.from({ length: inputs.length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(rngNext() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  
+  for (const idx of indices) {
+    const { loss } = trainStep(inputs[idx], outputs[idx], weights, learningRate);
+    totalLoss += loss;
+  }
+  
+  return totalLoss / inputs.length;
+};
+
+// Initialize MLP weights with a seeded RNG
+export const initializeMLPWeightsWithRng = (
+  rngNext: () => number,
+  inputSize: number = MNIST_INPUT_SIZE,
+  hiddenSize: number = MNIST_HIDDEN_SIZE,
+  outputSize: number = MNIST_OUTPUT_SIZE
+): MLPWeights => {
+  const xavierHidden = Math.sqrt(2 / (inputSize + hiddenSize));
+  const xavierOutput = Math.sqrt(2 / (hiddenSize + outputSize));
+  
+  return {
+    W1: Array.from({ length: inputSize }, () =>
+      Array.from({ length: hiddenSize }, () => (rngNext() - 0.5) * 2 * xavierHidden)
+    ),
+    b1: Array.from({ length: hiddenSize }, () => 0),
+    W2: Array.from({ length: hiddenSize }, () =>
+      Array.from({ length: outputSize }, () => (rngNext() - 0.5) * 2 * xavierOutput)
+    ),
+    b2: Array.from({ length: outputSize }, () => 0),
+  };
 };
 
 // Clone weights (deep copy)
