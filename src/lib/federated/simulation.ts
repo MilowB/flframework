@@ -430,17 +430,38 @@ export const simulateClientTraining = async (
   }
   
   // Convert global model to MLP weights
-  const globalMLP = unflattenWeights(
+  let globalMLP = unflattenWeights(
     { layers: globalModel.layers, bias: globalModel.bias },
     MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
   );
-  
+
+  // --- 50/50 aggregation client-side ---
+  // Si la config demande une agrégation client et qu'un modèle local existe, on fait la moyenne (FedAvg)
+  if (client.lastLocalModel && client.clientAggregationMethod === '50-50') {
+    // On suppose que lastLocalModel est au format ModelWeights
+    const prevMLP = unflattenWeights(
+      { layers: client.lastLocalModel.layers, bias: client.lastLocalModel.bias },
+      MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
+    );
+    // Moyenne des poids
+    for (let l = 0; l < globalMLP.layers.length; l++) {
+      for (let i = 0; i < globalMLP.layers[l].length; i++) {
+        globalMLP.layers[l][i] = (globalMLP.layers[l][i] + prevMLP.layers[l][i]) / 2;
+      }
+    }
+    for (let i = 0; i < globalMLP.bias.length; i++) {
+      globalMLP.bias[i] = (globalMLP.bias[i] + prevMLP.bias[i]) / 2;
+    }
+  }
+
   // Clone weights for local training
   const localMLP = cloneWeights(globalMLP);
   
   // Get or generate client-specific MNIST subset (non-IID)
   if (!clientDataStore.has(client.id)) {
-    clientDataStore.set(client.id, getClientDataSubset(mnistTrainData, client.id, client.dataSize, true));
+    // Utilise la seed du serveur si disponible
+    const seed = (client.serverConfig?.seed ?? 42);
+    clientDataStore.set(client.id, getClientDataSubset(mnistTrainData, client.id, client.dataSize, true, seed));
   }
   
   // Generate client-specific test data if not already done
@@ -476,6 +497,14 @@ export const simulateClientTraining = async (
   // Convert back to flat format
   const flat = flattenWeights(localMLP);
   
+  // --- Sauvegarde du modèle local entraîné ---
+  // On sauvegarde le modèle local dans le client (pour 50/50 ou autres usages)
+  client.lastLocalModel = {
+    layers: flat.layers,
+    bias: flat.bias,
+    version: globalModel.version,
+  };
+
   return {
     weights: {
       layers: flat.layers,
@@ -494,7 +523,24 @@ export const selectClients = (
   count: number
 ): ClientState[] => {
   const available = clients.filter(c => c.status === 'idle');
-  const shuffled = [...available].sort(() => Math.random() - 0.5);
+  // Shuffle avec seed
+  const seed = (clients[0]?.serverConfig?.seed ?? 42);
+  const seededShuffle = <T,>(arr: T[], seed: number) => {
+    const a = arr.slice();
+    let s = seed >>> 0;
+    const rnd = () => {
+      s ^= s << 13;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      return (s >>> 0) / 4294967295;
+    };
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  };
+  const shuffled = seededShuffle(available, seed);
   return shuffled.slice(0, Math.min(count, shuffled.length));
 };
 

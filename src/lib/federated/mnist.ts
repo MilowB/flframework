@@ -109,7 +109,8 @@ export const getClientDataSubset = (
   data: MNISTData,
   clientId: string,
   numSamples: number,
-  nonIID: boolean = true
+  nonIID: boolean = true,
+  seed: number = 42
 ): { inputs: number[][]; outputs: number[][] } => {
   const inputs: number[][] = [];
   const outputs: number[][] = [];
@@ -177,7 +178,7 @@ export const getClientDataSubset = (
       .map((label, idx) => label === primaryLabel ? idx : -1)
       .filter(idx => idx !== -1);
 
-    const shuffledPrimary = seededShuffle(primaryIndices, clientIndex + 1);
+    const shuffledPrimary = seededShuffle(primaryIndices, clientIndex + 1 + seed);
     for (let i = 0; i < Math.min(primaryCount, shuffledPrimary.length); i++) {
       const idx = shuffledPrimary[i];
       inputs.push(data.images[idx]);
@@ -186,7 +187,7 @@ export const getClientDataSubset = (
 
     // Random samples (avoid taking too many from primaryIndices again)
     const allIndices = Array.from({ length: data.labels.length }, (_, i) => i);
-    const shuffledAll = seededShuffle(allIndices, clientIndex + 12345);
+    const shuffledAll = seededShuffle(allIndices, clientIndex + 12345 + seed);
     for (let i = 0; i < shuffledAll.length && inputs.length < numSamples; i++) {
       const idx = shuffledAll[i];
       // allow repetition of primary label in the random tail as well, it's fine
@@ -195,11 +196,27 @@ export const getClientDataSubset = (
     }
   } else {
     // IID: uniform random sampling
-    const indices = Array.from({ length: data.labels.length }, (_, i) => i)
-      .sort(() => Math.random() - 0.5);
+    const indices = Array.from({ length: data.labels.length }, (_, i) => i);
+    // Shuffle avec seed
+    const seededShuffleIID = <T,>(arr: T[], seed: number) => {
+      const a = arr.slice();
+      let s = seed >>> 0;
+      const rnd = () => {
+        s ^= s << 13;
+        s ^= s >>> 17;
+        s ^= s << 5;
+        return (s >>> 0) / 4294967295;
+      };
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+      }
+      return a;
+    };
+    const shuffledIID = seededShuffleIID(indices, seed);
     
-    for (let i = 0; i < Math.min(numSamples, indices.length); i++) {
-      const idx = indices[i];
+    for (let i = 0; i < Math.min(numSamples, shuffledIID.length); i++) {
+      const idx = shuffledIID[i];
       inputs.push(data.images[idx]);
       outputs.push(oneHot(data.labels[idx]));
     }

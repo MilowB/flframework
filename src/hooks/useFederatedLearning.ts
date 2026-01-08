@@ -97,8 +97,22 @@ export const useFederatedLearning = (initialClients: number = 5) => {
         // Read the freshest state before each round
         const latest = stateRef.current;
 
+        // Ensure there are enough idle clients before starting the round.
+        const minRequired = latest.serverConfig.minClientsRequired ?? 1;
+        const waitStart = Date.now();
+        const waitTimeout = 10000; // ms
+        while (!abortRef.current) {
+          const avail = (stateRef.current.clients || []).filter(c => c.status === 'idle').length;
+          if (avail >= minRequired) break;
+          if (Date.now() - waitStart > waitTimeout) {
+            throw new Error(`Not enough clients available. Required: ${minRequired}, Available: ${avail}`);
+          }
+          // wait a bit and retry
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
         await runFederatedRound(
-          { ...latest, currentRound: round },
+          { ...stateRef.current, currentRound: round },
           updateState,
           updateClient,
           updateServerStatus

@@ -25,14 +25,18 @@ export interface ClientState {
   dataSize: number;
   lastUpdate: number;
   roundsParticipated: number;
+  lastLocalModel?: ModelWeights;
+  clientAggregationMethod?: 'none' | '50-50';
 }
 
 export interface ServerConfig {
   aggregationMethod: 'fedavg' | 'fedprox' | 'scaffold' | 'custom';
+  clientAggregationMethod?: 'none' | '50-50';
   clientsPerRound: number;
   totalRounds: number;
   minClientsRequired: number;
   modelArchitecture: string;
+  seed?: number; // Ajout de la seed (défaut 42)
 }
 
 export interface WeightsSnapshot {

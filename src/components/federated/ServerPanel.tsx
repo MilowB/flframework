@@ -1,3 +1,4 @@
+import { Input } from '@/components/ui/input';
 import { ServerConfig } from '@/lib/federated/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -60,11 +61,11 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
           </Select>
         </div>
 
-        {/* Aggregation Method */}
+        {/* Aggregation Method Server */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm text-muted-foreground">
             <Cpu className="w-4 h-4" />
-            Méthode d'agrégation
+            Méthode d'agrégation serveur
           </Label>
           <Select
             value={config.aggregationMethod}
@@ -89,6 +90,31 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
           </Select>
         </div>
 
+        {/* Aggregation Method Client */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Cpu className="w-4 h-4" />
+            Méthode d'agrégation client
+          </Label>
+          <Select
+            value={config.clientAggregationMethod ?? 'none'}
+            onValueChange={(value: 'none' | '50-50') => onConfigChange({ clientAggregationMethod: value })}
+            disabled={disabled}
+          >
+            <SelectTrigger className="bg-muted/50 border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">
+                <span className="font-medium">None</span>
+              </SelectItem>
+              <SelectItem value="50-50">
+                <span className="font-medium">50/50</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Clients per Round */}
         <div className="space-y-3">
           <Label className="flex items-center justify-between text-sm text-muted-foreground">
@@ -106,6 +132,22 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
             step={1}
             disabled={disabled}
             className="[&_[role=slider]]:bg-primary"
+          />
+        </div>
+
+        {/* Seed (aléatoire) */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Seed</span>
+          </Label>
+          <Input
+            type="number"
+            min={0}
+            step={1}
+            value={config.seed ?? 42}
+            onChange={e => onConfigChange({ seed: Number(e.target.value) })}
+            disabled={disabled}
+            className="w-32"
           />
         </div>
 
