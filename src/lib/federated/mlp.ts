@@ -1,3 +1,32 @@
+// Compare two MLPWeights and retourne la somme des différences absolues
+export function compareWeights(w1: MLPWeights, w2: MLPWeights): number {
+  let diff = 0;
+  for (let i = 0; i < w1.W1.length; i++) {
+    for (let j = 0; j < w1.W1[i].length; j++) {
+      diff += Math.abs(w1.W1[i][j] - w2.W1[i][j]);
+    }
+  }
+  for (let i = 0; i < w1.b1.length; i++) diff += Math.abs(w1.b1[i] - w2.b1[i]);
+  for (let i = 0; i < w1.W2.length; i++) {
+    for (let j = 0; j < w1.W2[i].length; j++) {
+      diff += Math.abs(w1.W2[i][j] - w2.W2[i][j]);
+    }
+  }
+  for (let i = 0; i < w1.b2.length; i++) diff += Math.abs(w1.b2[i] - w2.b2[i]);
+  return diff;
+}
+
+// Affiche la comparaison des poids entre tous les clients
+export function logClientModelDifferences(clientModels: Record<string, MLPWeights>) {
+  const ids = Object.keys(clientModels);
+  console.log(ids);
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const diff = compareWeights(clientModels[ids[i]], clientModels[ids[j]]);
+      console.log(`Différence totale entre ${ids[i]} et ${ids[j]} : ${diff}`);
+    }
+  }
+}
 // Real MLP implementation for MNIST classification
 
 export interface MLPWeights {
@@ -15,12 +44,12 @@ export interface TrainingConfig {
 
 // MNIST configuration
 export const MNIST_INPUT_SIZE = 784;  // 28x28 pixels
-export const MNIST_HIDDEN_SIZE = 128; // Hidden layer neurons
+export const MNIST_HIDDEN_SIZE = 128; //@debug Hidden layer neurons
 export const MNIST_OUTPUT_SIZE = 10;  // 10 digit classes
 
 // Activation functions
-const relu = (x: number): number => Math.max(0, x);
-const reluDerivative = (x: number): number => x > 0 ? 1 : 0;
+const sigmoid = (x: number): number => 1 / (1 + Math.exp(-x));
+const sigmoidDerivative = (y: number): number => y * (1 - y); // y = sigmoid(x)
 
 // Softmax for multi-class classification
 const softmax = (logits: number[]): number[] => {
@@ -58,7 +87,7 @@ export const forward = (
 ): { hidden: number[]; hiddenPreAct: number[]; output: number[] } => {
   const { W1, b1, W2, b2 } = weights;
   
-  // Hidden layer: relu(input @ W1 + b1)
+  // Hidden layer: sigmoid(input @ W1 + b1)
   const hiddenPreAct: number[] = [];
   const hidden: number[] = [];
   for (let j = 0; j < W1[0].length; j++) {
@@ -67,7 +96,7 @@ export const forward = (
       sum += input[i] * W1[i][j];
     }
     hiddenPreAct.push(sum);
-    hidden.push(relu(sum));
+    hidden.push(sigmoid(sum));
   }
   
   // Output layer: softmax(hidden @ W2 + b2)
@@ -141,14 +170,14 @@ export const trainStep = (
   const db2: number[] = [...dOutput];
   
   // Hidden layer gradients
-  const dHidden: number[] = hidden.map((_, i) => {
+  const dHidden: number[] = hidden.map((h, i) => {
     let sum = 0;
     for (let j = 0; j < dOutput.length; j++) {
       sum += dOutput[j] * W2[i][j];
     }
-    return sum * reluDerivative(hiddenPreAct[i]);
+    return sum * sigmoidDerivative(h);
   });
-  
+
   // Gradients for W1 and b1
   const dW1: number[][] = W1.map((row, i) =>
     row.map((_, j) => input[i] * dHidden[j])
@@ -209,19 +238,47 @@ export const trainEpochWithRng = (
   rngNext: () => number
 ): number => {
   let totalLoss = 0;
-  
+
+  if (inputs.length === 0) {
+    console.warn("trainEpochWithRng: empty input batch, no training performed.");
+    return 0;
+  }
+
   // Shuffle indices using provided RNG
   const indices = Array.from({ length: inputs.length }, (_, i) => i);
   for (let i = indices.length - 1; i > 0; i--) {
     const j = Math.floor(rngNext() * (i + 1));
     [indices[i], indices[j]] = [indices[j], indices[i]];
   }
-  
+
+  // Log initial weights for debug
+  const initialW1 = weights.W1[0][0];
+  const initialB1 = weights.b1[0];
+  let weightChanged = false;
+  let biasChanged = false;
+
   for (const idx of indices) {
+    const beforeW = weights.W1[0][0];
+    const beforeB = weights.b1[0];
     const { loss } = trainStep(inputs[idx], outputs[idx], weights, learningRate);
     totalLoss += loss;
+    // Check if weights or bias changed
+    if (!weightChanged && weights.W1[0][0] != beforeW) {
+      weightChanged = true;
+    }
+    if (!biasChanged && weights.b1[0] != beforeB) {
+      biasChanged = true;
+    }
   }
-  
+
+  // Log after epoch
+  if (!weightChanged && !biasChanged) {
+    console.warn("trainEpochWithRng: weights and biases did not change during epoch! Check data, learning rate, and gradients.");
+  } else {
+    // Optional: log the change for debug
+    console.log(`trainEpochWithRng: W1[0][0] changed from ${initialW1} to ${weights.W1[0][0]}, b1[0] from ${initialB1} to ${weights.b1[0]}`);
+  }
+
   return totalLoss / inputs.length;
 };
 

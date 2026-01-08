@@ -12,7 +12,8 @@ import {
   MLPWeights,
   MNIST_INPUT_SIZE,
   MNIST_HIDDEN_SIZE,
-  MNIST_OUTPUT_SIZE
+  MNIST_OUTPUT_SIZE,
+  logClientModelDifferences
 } from './mlp';
 import { loadMNISTTrain, loadMNISTTest, getClientDataSubset, oneHot, MNISTData } from './mnist';
 import { forward, computeLoss, computeAccuracy as computeMLPAccuracy } from './mlp';
@@ -484,7 +485,7 @@ export const simulateClientTraining = async (
   if (!mnistTrainData) {
     mnistTrainData = await loadMNISTTrain();
   }
-  
+
   // Convert global model to MLP weights
   let globalMLP = unflattenWeights(
     { layers: globalModel.layers, bias: globalModel.bias },
@@ -502,20 +503,24 @@ export const simulateClientTraining = async (
     for (let i = 0; i < globalMLP.W1.length; i++) {
       for (let j = 0; j < globalMLP.W1[i].length; j++) {
         globalMLP.W1[i][j] = (globalMLP.W1[i][j] + prevMLP.W1[i][j]) / 2;
+        globalMLP.W1[i][j] = prevMLP.W1[i][j];
       }
     }
     // Moyenne des poids W2
     for (let i = 0; i < globalMLP.W2.length; i++) {
       for (let j = 0; j < globalMLP.W2[i].length; j++) {
         globalMLP.W2[i][j] = (globalMLP.W2[i][j] + prevMLP.W2[i][j]) / 2;
+        globalMLP.W2[i][j] = prevMLP.W2[i][j];
       }
     }
     // Moyenne des biais
     for (let i = 0; i < globalMLP.b1.length; i++) {
       globalMLP.b1[i] = (globalMLP.b1[i] + prevMLP.b1[i]) / 2;
+      globalMLP.b1[i] = prevMLP.b1[i];
     }
     for (let i = 0; i < globalMLP.b2.length; i++) {
       globalMLP.b2[i] = (globalMLP.b2[i] + prevMLP.b2[i]) / 2;
+      globalMLP.b2[i] = prevMLP.b2[i];
     }
   }
 
@@ -543,6 +548,7 @@ export const simulateClientTraining = async (
   
   // Real training loop with seeded RNG for shuffling
   const rng = getRng();
+  console.log(`Avant entrainement du modèle client ${client.id}: ${localMLP.W1[0][0]}`);
   for (let epoch = 0; epoch < localEpochs; epoch++) {
     // Small delay to show progress
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -552,6 +558,7 @@ export const simulateClientTraining = async (
     
     onProgress(((epoch + 1) / localEpochs) * 100);
   }
+  console.log(`Après entrainement du modèle client ${client.id}: ${localMLP.W1[0][0]}`);
   
   // Evaluate on personalized test set
   onStatusUpdate?.('evaluating');
@@ -610,6 +617,11 @@ export const runFederatedRound = async (
     throw new Error('Global model not initialized');
   }
 
+  // Synchronise la méthode d'agrégation client pour tous les clients
+  for (const client of clients) {
+    client.clientAggregationMethod = serverConfig.clientAggregationMethod || 'none';
+  }
+
   // Select clients for this round
   const selectedClients = selectClients(clients, serverConfig.clientsPerRound);
   
@@ -658,7 +670,6 @@ export const runFederatedRound = async (
   onServerStatusUpdate('receiving');
   for (const { result, client } of trainedClients) {
     await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 200));
-    
     clientResults.push({
       weights: result.weights,
       dataSize: client.dataSize,
@@ -788,6 +799,17 @@ export const runFederatedRound = async (
           });
         }
       }
+
+
+      // Comparaison des modèles clients (log)
+      const clientModelMap: Record<string, MLPWeights> = {};
+      for (const c of clientResultsWithIds) {
+        if (c.id && c.weights) {
+          clientModelMap[c.id] = unflattenWeights(c.weights, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
+        }
+      }
+      logClientModelDifferences(clientModelMap);
+      
     } catch (err) {
       console.warn('Failed to compute cluster-averaged models:', err);
     }
