@@ -1,4 +1,4 @@
-import { ModelWeights, ClientState, RoundMetrics, FederatedState, WeightsSnapshot, ServerStatus, ClusterMetrics } from './types';
+import { ModelWeights, ClientState, RoundMetrics, FederatedState, WeightsSnapshot, ServerStatus, ClusterMetrics, ClientRoundMetrics } from './types';
 import { aggregationMethods } from './aggregations';
 import { 
   initializeMLPWeights, 
@@ -630,6 +630,7 @@ export const runFederatedRound = async (
   }
 
   const clientResults: { weights: ModelWeights; dataSize: number }[] = [];
+  const clientMetricsForRound: ClientRoundMetrics[] = [];
   const participatingIds = selectedClients.map(c => c.id);
 
   // Phase 1: Server sends model to clients
@@ -673,6 +674,15 @@ export const runFederatedRound = async (
     clientResults.push({
       weights: result.weights,
       dataSize: client.dataSize,
+    });
+
+    // Collect per-client metrics for this round
+    clientMetricsForRound.push({
+      clientId: client.id,
+      clientName: client.name,
+      loss: result.loss,
+      accuracy: result.accuracy,
+      testAccuracy: result.testAccuracy,
     });
 
     onClientUpdate(client.id, {
@@ -849,6 +859,7 @@ export const runFederatedRound = async (
     clusters: clustersForRound,
     silhouetteAvg: silhouetteAvgForRound,
     clusterMetrics: clusterMetricsForRound.length > 0 ? clusterMetricsForRound : undefined,
+    clientMetrics: clientMetricsForRound.length > 0 ? clientMetricsForRound : undefined,
   };
 
   onStateUpdate({
