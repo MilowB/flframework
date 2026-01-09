@@ -19,7 +19,6 @@ export function compareWeights(w1: MLPWeights, w2: MLPWeights): number {
 // Affiche la comparaison des poids entre tous les clients
 export function logClientModelDifferences(clientModels: Record<string, MLPWeights>) {
   const ids = Object.keys(clientModels);
-  console.log(ids);
   for (let i = 0; i < ids.length; i++) {
     for (let j = i + 1; j < ids.length; j++) {
       const diff = compareWeights(clientModels[ids[i]], clientModels[ids[j]]);

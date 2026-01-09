@@ -809,7 +809,6 @@ export const runFederatedRound = async (
         }
       }
       logClientModelDifferences(clientModelMap);
-      
     } catch (err) {
       console.warn('Failed to compute cluster-averaged models:', err);
     }
