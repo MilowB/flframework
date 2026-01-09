@@ -54,6 +54,14 @@ export interface ClusterMetrics {
   clientIds: string[];
 }
 
+export interface ClientRoundMetrics {
+  clientId: string;
+  clientName: string;
+  loss: number;
+  accuracy: number;
+  testAccuracy: number;
+}
+
 export interface RoundMetrics {
   round: number;
   globalLoss: number;
@@ -70,6 +78,8 @@ export interface RoundMetrics {
   silhouetteAvg?: number;
   // Accuracy of each cluster's averaged model on pooled test data
   clusterMetrics?: ClusterMetrics[];
+  // Per-client metrics for this round
+  clientMetrics?: ClientRoundMetrics[];
 }
 
 export type ServerStatus = 'idle' | 'sending' | 'waiting' | 'receiving' | 'evaluating' | 'completed';
