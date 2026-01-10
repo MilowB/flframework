@@ -1,3 +1,31 @@
+// Convert ModelWeights (flat) to MLPWeights (structured)
+export function modelWeightsToMLPWeights(
+  mw: { layers: number[][]; bias: number[] },
+  inputSize: number = MNIST_INPUT_SIZE,
+  hiddenSize: number = MNIST_HIDDEN_SIZE,
+  outputSize: number = MNIST_OUTPUT_SIZE
+): MLPWeights {
+  // Defensive: check structure
+  if (!mw.layers || !mw.bias || mw.layers.length < 2) {
+    throw new TypeError('modelWeightsToMLPWeights: Invalid ModelWeights structure');
+  }
+  // Reconstruct W1 [inputSize x hiddenSize]
+  const W1: number[][] = [];
+  for (let i = 0; i < inputSize; i++) {
+    W1.push(mw.layers[0].slice(i * hiddenSize, (i + 1) * hiddenSize));
+  }
+  // Reconstruct W2 [hiddenSize x outputSize]
+  const W2: number[][] = [];
+  for (let i = 0; i < hiddenSize; i++) {
+    W2.push(mw.layers[1].slice(i * outputSize, (i + 1) * outputSize));
+  }
+  return {
+    W1,
+    b1: mw.bias.slice(0, hiddenSize),
+    W2,
+    b2: mw.bias.slice(hiddenSize),
+  };
+}
 // Compare two MLPWeights and retourne la somme des différences absolues
 export function compareWeights(w1: MLPWeights, w2: MLPWeights): number {
   let diff = 0;
@@ -239,7 +267,6 @@ export const trainEpochWithRng = (
   let totalLoss = 0;
 
   if (inputs.length === 0) {
-    console.warn("trainEpochWithRng: empty input batch, no training performed.");
     return 0;
   }
 
@@ -268,14 +295,6 @@ export const trainEpochWithRng = (
     if (!biasChanged && weights.b1[0] != beforeB) {
       biasChanged = true;
     }
-  }
-
-  // Log after epoch
-  if (!weightChanged && !biasChanged) {
-    console.warn("trainEpochWithRng: weights and biases did not change during epoch! Check data, learning rate, and gradients.");
-  } else {
-    // Optional: log the change for debug
-    console.log(`trainEpochWithRng: W1[0][0] changed from ${initialW1} to ${weights.W1[0][0]}, b1[0] from ${initialB1} to ${weights.b1[0]}`);
   }
 
   return totalLoss / inputs.length;
@@ -348,3 +367,54 @@ export const unflattenWeights = (
     b2: flat.bias.slice(hiddenSize),
   };
 };
+
+// --- PCA-like projection utilities ---
+
+// Vectorize all weights and biases into a single 1D array
+export function vectorizeModel(weights: MLPWeights): number[] {
+  if (!weights.W1 || !weights.b1 || !weights.W2 || !weights.b2) {
+    throw new TypeError('vectorizeModel: One or more weight arrays are undefined!');
+  }
+  return [
+    ...weights.W1.flat(),
+    ...weights.b1,
+    ...weights.W2.flat(),
+    ...weights.b2,
+  ];
+}
+
+// Simple seeded PRNG (Mulberry32)
+function mulberry32(seed: number): () => number {
+  let t = seed >>> 0;
+  return function() {
+    t += 0x6D2B79F5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Seeded random projection to 3D (not true PCA, but deterministic and reproducible)
+export function pca3D_single(vec: number[], seed: number = 42): [number, number, number] {
+  const rng = mulberry32(seed);
+  // Generate 3 random projection vectors
+  const proj: number[][] = [[], [], []];
+  for (let d = 0; d < 3; d++) {
+    for (let i = 0; i < vec.length; i++) {
+      proj[d][i] = rng() * 2 - 1;
+    }
+    // Normalize projection vector
+    const norm = Math.sqrt(proj[d].reduce((sum, v) => sum + v * v, 0));
+    for (let i = 0; i < proj[d].length; i++) {
+      proj[d][i] /= norm || 1;
+    }
+  }
+  // Project vec onto each direction
+  const coords: [number, number, number] = [0, 0, 0];
+  for (let d = 0; d < 3; d++) {
+    for (let i = 0; i < vec.length; i++) {
+      coords[d] += vec[i] * proj[d][i];
+    }
+  }
+  return coords;
+}

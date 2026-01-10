@@ -37,6 +37,30 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
+        {/* Méthode d'affectation de modèle */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Cpu className="w-4 h-4" />
+            Méthode d'affectation de modèle
+          </Label>
+          <Select
+            value={config.modelAssignmentMethod ?? '1NN'}
+            onValueChange={(value: '1NN' | 'Probabiliste') => onConfigChange({ modelAssignmentMethod: value })}
+            disabled={disabled}
+          >
+            <SelectTrigger className="bg-muted/50 border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1NN">
+                <span className="font-medium">1NN</span>
+              </SelectItem>
+              <SelectItem value="Probabiliste">
+                <span className="font-medium">Probabiliste</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         {/* Model Architecture */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm text-muted-foreground">

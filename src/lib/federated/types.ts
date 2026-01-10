@@ -32,6 +32,7 @@ export interface ClientState {
 export interface ServerConfig {
   aggregationMethod: 'fedavg' | 'fedprox' | 'scaffold' | 'custom';
   clientAggregationMethod?: 'none' | '50-50';
+  modelAssignmentMethod?: '1NN' | 'Probabiliste';
   clientsPerRound: number;
   totalRounds: number;
   minClientsRequired: number;

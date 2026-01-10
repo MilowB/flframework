@@ -13,7 +13,10 @@ import {
   MNIST_INPUT_SIZE,
   MNIST_HIDDEN_SIZE,
   MNIST_OUTPUT_SIZE,
-  logClientModelDifferences
+  logClientModelDifferences,
+  vectorizeModel,
+  pca3D_single,
+  modelWeightsToMLPWeights
 } from './mlp';
 import { loadMNISTTrain, loadMNISTTest, getClientDataSubset, oneHot, MNISTData } from './mnist';
 import { forward, computeLoss, computeAccuracy as computeMLPAccuracy } from './mlp';
@@ -66,14 +69,7 @@ export const getSeed = (): number => currentSeed;
 // We'll convert distances to similarity weights and run a Louvain-like
 // community detection with a small refinement step (Leiden-like behavior).
 
-const vectorizeModel = (m: ModelWeights): number[] => {
-  const vec: number[] = [];
-  for (const layer of m.layers) {
-    for (const v of layer) vec.push(v);
-  }
-  for (const b of m.bias) vec.push(b);
-  return vec;
-};
+
 
 const l2Distance = (a: number[], b: number[]): number => {
   let s = 0;
@@ -270,10 +266,22 @@ const refinePartition = (A: number[][], partition: number[]): number[] => {
 };
 
 export const clusterClientModels = (clientResults: { id?: string; weights: ModelWeights; dataSize: number }[]) => {
-  const models = clientResults.map(c => c.weights);
-  const ids = clientResults.map((_, i) => i);
-  const D = computeDistanceMatrix(models);
-  if (models.length === 0) return { distanceMatrix: D, clusters: [] as string[][] };
+
+  // Convert ModelWeights to MLPWeights for vectorization
+  const mlpModels: import('./mlp').MLPWeights[] = [];
+  const ids: number[] = [];
+  for (let i = 0; i < clientResults.length; i++) {
+    const c = clientResults[i];
+    try {
+      const mlp = modelWeightsToMLPWeights(c.weights);
+      mlpModels.push(mlp);
+      ids.push(i);
+    } catch (err) {
+      console.warn('clusterClientModels: Skipping malformed ModelWeights for client', c.id, c.weights, err);
+    }
+  }
+  const D = computeDistanceMatrix(mlpModels);
+  if (mlpModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][] };
 
   const A = distancesToAdjacency(D);
   const partition = louvainPartition(A);
@@ -492,9 +500,17 @@ export const simulateClientTraining = async (
     MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
   );
 
+  // --- PCA projection before client training ---
+  {
+    const vec = vectorizeModel(globalMLP);
+    const coords = pca3D_single(vec, getSeed());
+    //console.log(`[PCA] Client ${client.id} BEFORE training:`, coords);
+  }
+
   // --- 50/50 aggregation client-side ---
   // Si la config demande une agrégation client et qu'un modèle local existe, on fait la moyenne (FedAvg)
   if (client.lastLocalModel && client.clientAggregationMethod === '50-50') {
+    console.log("OLALA");
     const prevMLP = unflattenWeights(
       { layers: client.lastLocalModel.layers, bias: client.lastLocalModel.bias },
       MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
@@ -503,25 +519,32 @@ export const simulateClientTraining = async (
     for (let i = 0; i < globalMLP.W1.length; i++) {
       for (let j = 0; j < globalMLP.W1[i].length; j++) {
         globalMLP.W1[i][j] = (globalMLP.W1[i][j] + prevMLP.W1[i][j]) / 2;
-        globalMLP.W1[i][j] = prevMLP.W1[i][j];
+        //globalMLP.W1[i][j] = prevMLP.W1[i][j];
       }
     }
     // Moyenne des poids W2
     for (let i = 0; i < globalMLP.W2.length; i++) {
       for (let j = 0; j < globalMLP.W2[i].length; j++) {
         globalMLP.W2[i][j] = (globalMLP.W2[i][j] + prevMLP.W2[i][j]) / 2;
-        globalMLP.W2[i][j] = prevMLP.W2[i][j];
+        //globalMLP.W2[i][j] = prevMLP.W2[i][j];
       }
     }
     // Moyenne des biais
     for (let i = 0; i < globalMLP.b1.length; i++) {
       globalMLP.b1[i] = (globalMLP.b1[i] + prevMLP.b1[i]) / 2;
-      globalMLP.b1[i] = prevMLP.b1[i];
+      //globalMLP.b1[i] = prevMLP.b1[i];
     }
     for (let i = 0; i < globalMLP.b2.length; i++) {
       globalMLP.b2[i] = (globalMLP.b2[i] + prevMLP.b2[i]) / 2;
-      globalMLP.b2[i] = prevMLP.b2[i];
+      //globalMLP.b2[i] = prevMLP.b2[i];
     }
+  }
+
+  // --- PCA projection after client training ---
+  {
+    const vec = vectorizeModel(globalMLP);
+    const coords = pca3D_single(vec, getSeed());
+    //console.log(`[PCA] Client ${client.id} AFTER 50-50:`, coords);
   }
 
   // Clone weights for local training
@@ -548,7 +571,6 @@ export const simulateClientTraining = async (
   
   // Real training loop with seeded RNG for shuffling
   const rng = getRng();
-  console.log(`Avant entrainement du modèle client ${client.id}: ${localMLP.W1[0][0]}`);
   for (let epoch = 0; epoch < localEpochs; epoch++) {
     // Small delay to show progress
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -558,7 +580,13 @@ export const simulateClientTraining = async (
     
     onProgress(((epoch + 1) / localEpochs) * 100);
   }
-  console.log(`Après entrainement du modèle client ${client.id}: ${localMLP.W1[0][0]}`);
+
+  // --- PCA projection after client training ---
+  {
+    const vec = vectorizeModel(localMLP);
+    const coords = pca3D_single(vec, getSeed());
+    //console.log(`[PCA] Client ${client.id} AFTER training:`, coords);
+  }
   
   // Evaluate on personalized test set
   onStatusUpdate?.('evaluating');
@@ -612,7 +640,7 @@ export const runFederatedRound = async (
   onServerStatusUpdate: (status: ServerStatus) => void
 ): Promise<RoundMetrics> => {
   const { serverConfig, clients, globalModel, currentRound } = state;
-  
+  console.log('Client objects at round start:', clients.map(c => c.id));
   if (!globalModel) {
     throw new Error('Global model not initialized');
   }
@@ -640,32 +668,38 @@ export const runFederatedRound = async (
     await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
   }
 
+
   // Phase 2: Server waits for clients to train
   onServerStatusUpdate('waiting');
+  // Les clusters et modèles de cluster doivent être initialisés APRÈS la phase de clustering (après clustersForRound)
+  let clusterModels: ModelWeights[] = [];
+  let clusterClientIds: string[][] = [];
+
+  // On commence par entraîner les clients avec le modèle global ou leur modèle cluster (1NN)
   const trainingPromises = selectedClients.map(async (client) => {
     onClientUpdate(client.id, { status: 'training', progress: 0 });
-    // Send cluster-specific model if available, otherwise fall back to global model
-    const modelToSend = clusterModelStore.get(client.id) || globalModel;
-
+    // Par défaut, modèle global ou cluster (1NN)
+    let modelToSend = clusterModelStore.get(client.id) || globalModel;
     const result = await simulateClientTraining(
       client,
       modelToSend,
       (progress) => onClientUpdate(client.id, { progress }),
       (status) => onClientUpdate(client.id, { status })
     );
-
+    // Inclure explicitement lastLocalModel dans la mise à jour du client
     onClientUpdate(client.id, {
       status: 'sending',
       progress: 100,
       localLoss: result.loss,
       localAccuracy: result.accuracy,
       localTestAccuracy: result.testAccuracy,
+      lastLocalModel: client.lastLocalModel,
     });
-
     return { result, client };
   });
 
   const trainedClients = await Promise.all(trainingPromises);
+
 
   // Phase 3: Server receives models from clients
   onServerStatusUpdate('receiving');
@@ -692,6 +726,68 @@ export const runFederatedRound = async (
     });
   }
 
+  // Phase 2.5 : Affectation Probabiliste (calculée AVANT le mapping des clients)
+  let probabilisteAssignments: Record<string, number> = {};
+  if (serverConfig.modelAssignmentMethod === 'Probabiliste') {
+    // Utiliser les modèles globaux pour le clustering initial
+    const clientResultsWithIds = selectedClients.map((client) => ({ id: client.id, weights: clusterModelStore.get(client.id) || globalModel, dataSize: client.dataSize }));
+    const clustering = clusterClientModels(clientResultsWithIds as any);
+    clusterClientIds = clustering.clusters;
+    clusterModels = clusterClientIds.map((grp) => {
+      const anyClientId = grp[0];
+      return clusterModelStore.get(anyClientId)!;
+    });
+    // Pour chaque client, calculer la proba et choisir un cluster
+    const EPSILON = 1e-3;
+    for (const client of selectedClients) {
+      const clientIdx = clients.findIndex(c => c.id === client.id);
+      const clientModel = clusterModelStore.get(client.id) || globalModel;
+      const clientVec = vectorizeModel(unflattenWeights(clientModel, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE));
+      const clusterDistances = clusterClientIds.map((grp, i) => {
+        if (!grp.length) return Infinity;
+        let sum = 0;
+        for (const cid of grp) {
+          const cIdx = clients.findIndex(c => c.id === cid);
+          const cModel = clusterModelStore.get(cid) || globalModel;
+          const cVec = vectorizeModel(unflattenWeights(cModel, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE));
+          sum += l2Distance(clientVec, cVec);
+        }
+        return sum / grp.length;
+      });
+      // Recherche des clusters à distance nulle (tolérance epsilon)
+      const zeroIdxs = clusterDistances
+        .map((d, i) => (isFinite(d) && Math.abs(d) < EPSILON ? i : -1))
+        .filter(i => i !== -1);
+      let probs: number[];
+      if (zeroIdxs.length > 0) {
+        // Répartir la proba uniquement entre les clusters à distance nulle
+        probs = clusterDistances.map((_, i) => zeroIdxs.includes(i) ? 1 / zeroIdxs.length : 0);
+        console.log(`[Probabiliste] Client ${client.id} : clusters à distance nulle (epsilon=${EPSILON}) =`, zeroIdxs, ', proba =', probs);
+      } else {
+        const sumDist = clusterDistances.reduce((a, b) => a + (isFinite(b) ? b : 0), 0);
+        probs = clusterDistances.map(d => {
+          if (!isFinite(d) || sumDist === 0) return 1 / clusterDistances.length;
+          return 1 - (d / sumDist);
+        });
+        probs = probs.map(p => Math.max(0, p));
+        const total = probs.reduce((a, b) => a + b, 0);
+        if (total > 0) probs = probs.map(p => p / total);
+        else probs = Array(clusterDistances.length).fill(1 / clusterDistances.length);
+        console.log(`[Probabiliste] Client ${client.id} : distances clusters =`, clusterDistances.map(d => d.toFixed(4)), 'probas =', probs.map(p => p.toFixed(4)));
+      }
+      const rng = getRng();
+      let r = rng.next();
+      let acc = 0;
+      let chosen = 0;
+      for (let i = 0; i < probs.length; i++) {
+        acc += probs[i];
+        if (r <= acc) { chosen = i; break; }
+      }
+      console.log(`[Probabiliste] Client ${client.id} : cluster choisi = ${chosen}, r = ${r.toFixed(4)}`);
+      probabilisteAssignments[client.id] = chosen;
+    }
+  }
+
   // Phase 4: Aggregation and Evaluation
   // Compute distance matrix between client models and cluster them
   // declare silhouette outside the clustering try-block so it's available
@@ -706,6 +802,15 @@ export const runFederatedRound = async (
     // we'll store clustering.distanceMatrix and clustering.clusters
     var distanceMatrixForRound = clustering.distanceMatrix;
     var clustersForRound = clustering.clusters;
+
+    // Initialiser clusterModels et clusterClientIds pour l'affectation probabiliste APRÈS clustering
+    if (serverConfig.modelAssignmentMethod === 'Probabiliste' && typeof clustersForRound !== 'undefined' && clustersForRound.length > 0) {
+      clusterClientIds = clustersForRound;
+      clusterModels = clustersForRound.map((grp) => {
+        const anyClientId = grp[0];
+        return clusterModelStore.get(anyClientId)!;
+      });
+    }
     // compute silhouette scores if distance matrix and clusters available
     try {
       const D = distanceMatrixForRound;
@@ -818,7 +923,7 @@ export const runFederatedRound = async (
           clientModelMap[c.id] = unflattenWeights(c.weights, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
         }
       }
-      logClientModelDifferences(clientModelMap);
+      //logClientModelDifferences(clientModelMap);
     } catch (err) {
       console.warn('Failed to compute cluster-averaged models:', err);
     }
@@ -833,6 +938,13 @@ export const runFederatedRound = async (
   const aggregationStart = Date.now();
   const newGlobalModel = aggregationFn(clientResults);
   const aggregationTime = Date.now() - aggregationStart;
+
+  // --- PCA projection after server aggregation ---
+  {
+    const vec = vectorizeModel(unflattenWeights(newGlobalModel, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE));
+    const coords = pca3D_single(vec, getSeed());
+    //console.log(`[PCA] SERVER after aggregation:`, coords);
+  }
 
   // Evaluate global model on test set
   const testMetrics = evaluateOnTestSet(newGlobalModel);

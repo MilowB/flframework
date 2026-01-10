@@ -45,7 +45,9 @@ export const useFederatedLearning = (initialClients: number = 5) => {
     setState(prev => ({
       ...prev,
       clients: prev.clients.map(c =>
-        c.id === clientId ? { ...c, ...update } : c
+        c.id === clientId
+          ? { ...c, ...update, lastLocalModel: update.lastLocalModel ?? c.lastLocalModel }
+          : c
       ),
     }));
   }, []);
