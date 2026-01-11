@@ -15,13 +15,13 @@ export const applyClientAggregation = (
   receivedModel: MLPWeights,
   previousLocalModel: MLPWeights | null,
   localModelHistory?: Array<{
-    layers: number[][][];
-    bias: number[][];
+    layers: number[][];
+    bias: number[];
     version: number;
   }>,
   receivedModelHistory?: Array<{
-    layers: number[][][];
-    bias: number[][];
+    layers: number[][];
+    bias: number[];
     version: number;
   }>,
 ): MLPWeights => {
