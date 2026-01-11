@@ -7,7 +7,11 @@ import { clusterModelStore } from '../core/stores';
 import { unflattenWeights, vectorizeModel, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE } from '../models/mlp';
 import { l2Distance } from '../clustering/louvain';
 
-const EPSILON = 1e-3;
+import {
+  pca3D_single
+} from '../models/mlp';
+
+const EPSILON = 1e-6;
 
 // Compute probabilistic cluster assignments for all selected clients
 export const computeProbabilisticAssignments = (
@@ -19,19 +23,24 @@ export const computeProbabilisticAssignments = (
   const rng = getRng();
   
   for (const client of selectedClients) {
-    const clientModel = clusterModelStore.get(client.id) || globalModel;
+    const clientModel = clusterModelStore.get(client.id);
     const clientVec = vectorizeModel(unflattenWeights(clientModel, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE));
     
-    // Compute distances to each cluster
-    const clusterDistances = clusterClientIds.map((grp) => {
+    // Compute distances to each cluster centroid (modèle agrégé du cluster)
+    const clusterDistances = clusterClientIds.map((grp, idx) => {
       if (!grp.length) return Infinity;
-      let sum = 0;
-      for (const cid of grp) {
-        const cModel = clusterModelStore.get(cid) || globalModel;
-        const cVec = vectorizeModel(unflattenWeights(cModel, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE));
-        sum += l2Distance(clientVec, cVec);
+      // Récupère le modèle du cluster ou fallback sur globalModel
+      let clusterModel = clusterModelStore.get(`cluster-${idx}`);
+      if (!clusterModel) {
+        console.warn(`Aucun modèle trouvé pour cluster-${idx}, fallback globalModel`);
+        clusterModel = globalModel;
       }
-      return sum / grp.length;
+      // PCA 3D du modèle de cluster
+      const clusterVec = vectorizeModel(unflattenWeights(clusterModel, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE));
+      //const pca3d = pca3D_single(clusterVec);
+      //console.log(`Cluster ${idx} PCA3D:`, pca3d);
+
+      return l2Distance(clientVec, clusterVec);
     });
     
     // Check for clusters at zero distance (within epsilon)
@@ -55,7 +64,6 @@ export const computeProbabilisticAssignments = (
       if (total > 0) probs = probs.map(p => p / total);
       else probs = Array(clusterDistances.length).fill(1 / clusterDistances.length);
     }
-    
     // Sample cluster based on probabilities
     const r = rng.next();
     let acc = 0;

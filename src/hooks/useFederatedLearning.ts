@@ -86,7 +86,7 @@ export const useFederatedLearning = (initialClients: number = 5) => {
     if (!state.globalModel) {
       initializeTraining();
     }
-    
+
     abortRef.current = false;
     setState(prev => ({ ...prev, isRunning: true }));
 
@@ -96,6 +96,8 @@ export const useFederatedLearning = (initialClients: number = 5) => {
       ...stateRef.current,
       globalModel: initializeModel(stateRef.current.serverConfig.modelArchitecture),
     };
+
+    let clustersForRound: string[][] | undefined = undefined;
 
     for (let round = startingState.currentRound; round < startingState.serverConfig.totalRounds; round++) {
       if (abortRef.current) break;
@@ -118,12 +120,14 @@ export const useFederatedLearning = (initialClients: number = 5) => {
           await new Promise(resolve => setTimeout(resolve, 200));
         }
 
-        await runFederatedRound(
+        const [metrics, nextClusters] = await runFederatedRound(
           { ...stateRef.current, currentRound: round },
           updateState,
           updateClient,
-          updateServerStatus
+          updateServerStatus,
+          clustersForRound
         );
+        clustersForRound = nextClusters;
 
         // Small delay between rounds
         setState(prev => ({ ...prev, serverStatus: 'idle' }));

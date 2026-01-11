@@ -21,7 +21,7 @@ import { simulateClientTraining, selectClients, createClient } from './clients/t
 import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
-import { computeProbabilisticAssignments } from './assignment/probabilistic';
+import { applyAssignment } from './assignment';
 
 // Preload MNIST data
 export const preloadMNIST = async (): Promise<void> => {
@@ -50,12 +50,22 @@ export const initializeModel = (architecture: string): ModelWeights => {
 };
 
 // Run a single federated round
+/**
+ * Run a single federated round.
+ * @param state FederatedState
+ * @param onStateUpdate Callback for state update
+ * @param onClientUpdate Callback for client update
+ * @param onServerStatusUpdate Callback for server status update
+ * @param clustersForRound Clusters from previous round (optional)
+ * @returns [RoundMetrics, clustersForRound]
+ */
 export const runFederatedRound = async (
   state: FederatedState,
   onStateUpdate: (state: Partial<FederatedState>) => void,
   onClientUpdate: (clientId: string, update: Partial<ClientState>) => void,
-  onServerStatusUpdate: (status: ServerStatus) => void
-): Promise<RoundMetrics> => {
+  onServerStatusUpdate: (status: ServerStatus) => void,
+  clustersForRound?: string[][]
+): Promise<[RoundMetrics, string[][] | undefined]> => {
   const { serverConfig, clients, globalModel, currentRound } = state;
   
   if (!globalModel) {
@@ -88,7 +98,36 @@ export const runFederatedRound = async (
   onServerStatusUpdate('waiting');
   const trainingPromises = selectedClients.map(async (client) => {
     onClientUpdate(client.id, { status: 'training', progress: 0 });
-    const modelToSend = clusterModelStore.get(client.id) || globalModel;
+    // Fallback: if clustersForRound is not initialized, use only the global model
+    let clusterModels: ModelWeights[] | undefined = undefined;
+    let clusterAssignments: Record<string, number> | undefined = undefined;
+    let clusterClientIds: string[][] | undefined = undefined;
+    if (typeof clustersForRound !== 'undefined' && clustersForRound.length > 0) {
+      clusterModels = clustersForRound.map((grp, idx) => {
+        const firstClientId = grp[0];
+        return clusterModelStore.get(firstClientId) || globalModel;
+      });
+      clusterAssignments = {};
+      clustersForRound.forEach((grp, idx) => {
+        grp.forEach(cid => { clusterAssignments![cid] = idx; });
+      });
+      clusterClientIds = clustersForRound;
+    }
+
+    const modelAssignmentMethod = serverConfig.modelAssignmentMethod || '1NN';
+    const modelToSend = applyAssignment(
+      modelAssignmentMethod,
+      client,
+      {
+        globalModel,
+        clusterModels,
+        clusterAssignments,
+        clusterClientIds,
+        selectedClients,
+        round: currentRound,
+      }
+    );
+    
     const result = await simulateClientTraining(
       client,
       modelToSend,
@@ -131,7 +170,6 @@ export const runFederatedRound = async (
   let silhouetteAvgForRound: number | undefined;
   let clusterMetricsForRound: ClusterMetrics[] = [];
   let distanceMatrixForRound: number[][] | undefined;
-  let clustersForRound: string[][] | undefined;
 
   try {
     const clientResultsWithIds = trainedClients.map(({ result, client }) => ({ 
@@ -226,7 +264,7 @@ export const runFederatedRound = async (
     roundHistory: [...state.roundHistory, roundMetrics],
   });
 
-  return roundMetrics;
+  return [roundMetrics, clustersForRound];
 };
 
 // Re-export for backward compatibility

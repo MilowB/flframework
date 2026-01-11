@@ -93,7 +93,7 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
           </Label>
           <Select
             value={config.aggregationMethod}
-            onValueChange={(value: ServerConfig['aggregationMethod']) => 
+            onValueChange={(value: ServerConfig['aggregationMethod']) =>
               onConfigChange({ aggregationMethod: value })
             }
             disabled={disabled}
@@ -134,6 +134,9 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
               </SelectItem>
               <SelectItem value="50-50">
                 <span className="font-medium">50/50</span>
+              </SelectItem>
+              <SelectItem value="gravity">
+                <span className="font-medium">Gravité</span>
               </SelectItem>
             </SelectContent>
           </Select>

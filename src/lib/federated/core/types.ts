@@ -15,6 +15,19 @@ export interface ClientConfig {
 }
 
 export interface ClientState {
+  /**
+   * Historique des 3 derniers modèles locaux après fine-tuning (N, N-1, N-2)
+   */
+  localModelHistory?: Array<{
+    layers: number[][][];
+    bias: number[][];
+    version: number;
+  }>;
+  receivedModelHistory?: Array<{
+    layers: number[][][];
+    bias: number[][];
+    version: number;
+  }>;
   id: string;
   name: string;
   status: 'idle' | 'receiving' | 'training' | 'sending' | 'completed' | 'error' | 'evaluating';
