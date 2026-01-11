@@ -30,10 +30,7 @@ const Index = () => {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
         <div className="container py-4">
-          <div className="flex items-center gap-4">
-            <div className="p-2.5 rounded-xl bg-gradient-primary">
-              <Network className="w-6 h-6 text-primary-foreground" />
-            </div>
+          <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-foreground">
                 Federated Learning Framework
@@ -42,14 +39,12 @@ const Index = () => {
                 MNIST Classification — {mnistLoaded ? '60,000 images chargées' : 'Chargement MNIST...'}
               </p>
             </div>
-            <div className="ml-auto">
-              <ExperimentControls
-                state={state}
-                clientModels={clientModels}
-                onLoad={loadExperiment}
-                disabled={state.isRunning}
-              />
-            </div>
+            <ExperimentControls
+              state={state}
+              clientModels={clientModels}
+              onLoad={loadExperiment}
+              disabled={state.isRunning}
+            />
           </div>
         </div>
       </header>

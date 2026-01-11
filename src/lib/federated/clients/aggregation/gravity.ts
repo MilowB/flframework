@@ -43,13 +43,13 @@ export const applyGravityAggregation = (
     receivedModel: MLPWeights,
     previousLocalModel: MLPWeights | null,
     localModelHistory?: Array<{
-        layers: number[][][];
-        bias: number[][];
+        layers: number[][];
+        bias: number[];
         version: number;
     }>,
     receivedModelHistory?: Array<{
-        layers: number[][][];
-        bias: number[][];
+        layers: number[][];
+        bias: number[];
         version: number;
     }>,
     k: number = 0.1 // facteur d'ajustement de la contre-force
