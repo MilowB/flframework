@@ -22,7 +22,7 @@ const Comparison = () => {
     try {
       const data = await loadExperiment(file);
       const newExperiment: LoadedExperiment = {
-        id: crypto.randomUUID(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         name: file.name.replace('.json', ''),
         data,
       };
@@ -34,7 +34,7 @@ const Comparison = () => {
     } catch (error) {
       toast({
         title: 'Erreur',
-        description: 'Impossible de charger le fichier d\'expérience.',
+        description: 'Impossible de charger le fichier d\'expérience : ' + error,
         variant: 'destructive',
       });
     }
