@@ -88,6 +88,7 @@ export const simulateClientTraining = async (
     )
     : null;
 
+  console.log(`Traitement du client ${client.id}`);
   const aggregationMethod = client.clientAggregationMethod || 'none';
   const startingModel = applyClientAggregation(aggregationMethod, receivedMLP, previousLocalMLP, client.localModelHistory, client.receivedModelHistory);
 

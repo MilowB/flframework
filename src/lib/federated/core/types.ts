@@ -39,12 +39,12 @@ export interface ClientState {
   lastUpdate: number;
   roundsParticipated: number;
   lastLocalModel?: ModelWeights;
-  clientAggregationMethod?: 'none' | '50-50';
+  clientAggregationMethod?: 'none' | '50-50' | 'gravity';
 }
 
 export interface ServerConfig {
   aggregationMethod: 'fedavg' | 'fedprox' | 'scaffold' | 'custom';
-  clientAggregationMethod?: 'none' | '50-50';
+  clientAggregationMethod?: 'none' | '50-50' | 'gravity';
   modelAssignmentMethod?: '1NN' | 'Probabiliste';
   clientsPerRound: number;
   totalRounds: number;

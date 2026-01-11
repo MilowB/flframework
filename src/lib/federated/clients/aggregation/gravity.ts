@@ -61,12 +61,11 @@ export const applyGravityAggregation = (
 
     // Constantes physiques
     const G = 9.8;
-    const m_centroid = 10e4;
+    const m_centroid = 10e3;
     const m_client = 10;
     // Calcul de la distance L2 entre les deux modèles (N)
     const distance = l2DistanceMLP(receivedModel, previousLocalModel);
     let w = 1;
-    console.log("OLALA 1");
     if (distance > 0) {
         const epsilon = 1e-8;
         // Force gravitationnelle réelle (G=9.8, m1=100, m2=1)
@@ -80,7 +79,6 @@ export const applyGravityAggregation = (
 
         // --- Modulation par la "vitesse" d'éloignement (distance N-1) ---
         let v = 0;
-        console.log("OLALA 2");
         console.log(localModelHistory);
         console.log(receivedModelHistory);
         if (localModelHistory && receivedModelHistory &&

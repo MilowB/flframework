@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { FederatedState, ClientState, ServerConfig, ServerStatus, ModelWeights } from '@/lib/federated/types';
 import { initializeModel, createClient, runFederatedRound, preloadMNIST, getClientModels, setClientModels, setSeed } from '@/lib/federated/simulation';
 import { ExperimentData } from '@/lib/federated/experimentStorage';
+// import { useStrategyHyperparams } from '@/components/federated/StrategyHyperparamsContext';
+import { useToast } from '@/hooks/use-toast';
 
 const defaultServerConfig: ServerConfig = {
   aggregationMethod: 'fedavg',
@@ -12,7 +14,22 @@ const defaultServerConfig: ServerConfig = {
   seed: 42,
 };
 
-export const useFederatedLearning = (initialClients: number = 5) => {
+// Utilitaire pour accès dynamique aux hyperparams dynamiques selon la stratégie sélectionnée
+function getActiveDynamicData(hyperparamsByStrategy: Record<string, any>, selectedStrategy: string) {
+  const params = hyperparamsByStrategy[selectedStrategy];
+  if (
+    params &&
+    params.dynamicData &&
+    typeof params.dynamicClient === 'number' &&
+    typeof params.receiverClient === 'number' &&
+    typeof params.changeRound === 'number'
+  ) {
+    return params;
+  }
+  return undefined;
+}
+
+export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, ...otherStrategies: any[]) => {
   const [state, setState] = useState<FederatedState>(() => ({
     isRunning: false,
     currentRound: 0,
@@ -40,6 +57,9 @@ export const useFederatedLearning = (initialClients: number = 5) => {
       console.log('MNIST dataset ready');
     });
   }, []);
+
+  // gravity is now passed as an argument
+  const { toast } = useToast();
 
   const updateClient = useCallback((clientId: string, update: Partial<ClientState>) => {
     setState(prev => ({
@@ -99,12 +119,69 @@ export const useFederatedLearning = (initialClients: number = 5) => {
 
     let clustersForRound: string[][] | undefined = undefined;
 
+    // Pour éviter plusieurs transferts, on garde trace des transferts déjà faits (clé: clientId + round)
+    const dynamicTransferDone = new Set<string>();
+
     for (let round = startingState.currentRound; round < startingState.serverConfig.totalRounds; round++) {
       if (abortRef.current) break;
 
       try {
         // Read the freshest state before each round
         const latest = stateRef.current;
+
+        // --- Dynamic data transfer logic (extensible) ---
+        const clientAggMethod = latest.serverConfig?.clientAggregationMethod || 'none';
+        const hyperparamsByStrategy: Record<string, any> = {
+          none,
+          gravity,
+          fiftyFifty,
+          // Ajoutez ici d'autres stratégies si besoin, ex: ...otherStrategies
+        };
+        const dynamicParams = getActiveDynamicData(hyperparamsByStrategy, clientAggMethod);
+        if (
+          dynamicParams &&
+          round === dynamicParams.changeRound
+        ) {
+          // Map client numbers to array indices (1-based UI, 0-based array)
+          const dynamicIdx = dynamicParams.dynamicClient;
+          const receiverIdx = dynamicParams.receiverClient;
+          const clients = latest.clients;
+          let errorMsg = '';
+          if (
+            dynamicIdx < 0 || dynamicIdx >= clients.length ||
+            receiverIdx < 0 || receiverIdx >= clients.length ||
+            dynamicIdx === receiverIdx
+          ) {
+            errorMsg = 'Numéro de client invalide.';
+          } else {
+            const receiver = clients[receiverIdx];
+            const dynamic = clients[dynamicIdx];
+            const transferKey = `${dynamic.id}|${round}`;
+            if (!dynamicTransferDone.has(transferKey)) {
+              // Data stores are keyed by client.id
+              // Use clientDataStore and clientTestDataStore
+              // Import here to avoid circular deps
+              const { clientDataStore, clientTestDataStore } = await import('@/lib/federated/core/stores');
+              const train = clientDataStore.get(receiver.id);
+              const test = clientTestDataStore.get(receiver.id);
+              if (!train || !test) {
+                errorMsg = 'Données manquantes pour le client source.';
+              } else {
+                console.log(`Changement de dataset du client ${dynamic.id} en le client ${receiver.id}`);
+                clientDataStore.set(dynamic.id, JSON.parse(JSON.stringify(train)));
+                clientTestDataStore.set(dynamic.id, JSON.parse(JSON.stringify(test)));
+                dynamicTransferDone.add(transferKey);
+              }
+            }
+          }
+          if (errorMsg) {
+            toast({
+              title: 'Erreur de transfert de données',
+              description: errorMsg,
+              variant: 'destructive',
+            });
+          }
+        }
 
         // Ensure there are enough idle clients before starting the round.
         const minRequired = latest.serverConfig.minClientsRequired ?? 1;

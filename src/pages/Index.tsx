@@ -1,3 +1,4 @@
+import React from 'react';
 import { useFederatedLearning } from '@/hooks/useFederatedLearning';
 import { ServerPanel } from '@/components/federated/ServerPanel';
 import { ClientCard } from '@/components/federated/ClientCard';
@@ -11,8 +12,18 @@ import { ExperimentControls } from '@/components/federated/ExperimentControls';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Network, LayoutGrid, Code } from 'lucide-react';
+import { StrategyHyperparamsProvider } from '@/components/federated/StrategyHyperparamsProvider';
+import { useStrategyHyperparams } from '@/components/federated/StrategyHyperparamsContext';
+import GravityPanel from '@/components/federated/GravityPanel';
+import NonePanel from '@/components/federated/NonePanel';
+import FiftyFiftyPanel from '@/components/federated/FiftyFiftyPanel';
 
-const Index = () => {
+
+const IndexContent = () => {
+  const { gravity, setGravity } = useStrategyHyperparams();
+  // Ajout des états locaux pour les autres stratégies dynamiques
+  const [none, setNone] = React.useState({ dynamicData: false });
+  const [fiftyFifty, setFiftyFifty] = React.useState({ dynamicData: false });
   const {
     state,
     mnistLoaded,
@@ -23,7 +34,13 @@ const Index = () => {
     setClientCount,
     updateServerConfig,
     loadExperiment,
-  } = useFederatedLearning(6);
+  } = useFederatedLearning(6, gravity, none, fiftyFifty);
+  const [gravityCollapsed, setGravityCollapsed] = React.useState(false);
+
+  // Determine if gravity strategy is selected
+  const isNone = state.serverConfig?.clientAggregationMethod === 'none';
+  const isFiftyFifty = state.serverConfig?.clientAggregationMethod === '50-50';
+  const isGravity = state.serverConfig?.clientAggregationMethod === 'gravity';
 
   return (
     <div className="min-h-screen bg-background">
@@ -77,6 +94,31 @@ const Index = () => {
 
           {/* Center - Visualization & Metrics */}
           <div className="lg:col-span-6 space-y-6">
+            {/* Client Aggregation Panels */}
+            {isNone && (
+              <NonePanel
+                value={none}
+                onChange={setNone}
+                collapsed={gravityCollapsed}
+                onCollapseToggle={() => setGravityCollapsed((c) => !c)}
+              />
+            )}
+            {isFiftyFifty && (
+              <FiftyFiftyPanel
+                value={fiftyFifty}
+                onChange={setFiftyFifty}
+                collapsed={gravityCollapsed}
+                onCollapseToggle={() => setGravityCollapsed((c) => !c)}
+              />
+            )}
+            {isGravity && (
+              <GravityPanel
+                value={gravity}
+                onChange={setGravity}
+                collapsed={gravityCollapsed}
+                onCollapseToggle={() => setGravityCollapsed((c) => !c)}
+              />
+            )}
             <Tabs defaultValue="network" className="w-full">
               <TabsList className="w-full grid grid-cols-3 bg-muted/30">
                 <TabsTrigger value="network" className="gap-2">
@@ -140,5 +182,11 @@ const Index = () => {
     </div>
   );
 };
+
+const Index = () => (
+  <StrategyHyperparamsProvider>
+    <IndexContent />
+  </StrategyHyperparamsProvider>
+);
 
 export default Index;
