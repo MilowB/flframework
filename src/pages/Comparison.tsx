@@ -1,10 +1,11 @@
 import { useState, useRef, useMemo } from 'react';
-import { Upload, X, FileJson } from 'lucide-react';
+import { Upload, X, FileJson, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { loadExperiment, type ExperimentData } from '@/lib/federated/results/experimentStorage';
 import { useToast } from '@/hooks/use-toast';
 import { ComparisonChart } from '@/components/federated/ComparisonChart';
+import { ComparisonSimilarityMatrix } from '@/components/federated/ComparisonSimilarityMatrix';
 
 interface LoadedExperiment {
   id: string;
@@ -18,15 +19,6 @@ const Comparison = () => {
   const { toast } = useToast();
 
   const handleFileLoad = async (file: File) => {
-    if (experiments.length >= 3) {
-      toast({
-        title: 'Limite atteinte',
-        description: 'Vous pouvez charger au maximum 3 expériences.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     try {
       const data = await loadExperiment(file);
       const newExperiment: LoadedExperiment = {
@@ -62,10 +54,18 @@ const Comparison = () => {
     setExperiments((prev) => prev.filter((exp) => exp.id !== id));
   };
 
+  const clearAllExperiments = () => {
+    setExperiments([]);
+    toast({
+      title: 'Comparaison vidée',
+      description: 'Toutes les expériences ont été retirées.',
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
+      <header className="sticky top-12 z-30 border-b border-border bg-background/80 backdrop-blur-lg">
         <div className="container py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -73,7 +73,7 @@ const Comparison = () => {
                 Comparaison d'expériences
               </h1>
               <p className="text-sm text-muted-foreground">
-                Chargez jusqu'à 3 fichiers d'expériences pour comparer les résultats
+                Chargez des fichiers d'expériences pour comparer les résultats
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -85,9 +85,18 @@ const Comparison = () => {
                 onChange={handleFileChange}
                 className="hidden"
               />
+              {experiments.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={clearAllExperiments}
+                  className="gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Vider
+                </Button>
+              )}
               <Button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={experiments.length >= 3}
                 className="gap-2"
               >
                 <Upload className="w-4 h-4" />
@@ -101,7 +110,7 @@ const Comparison = () => {
       <main className="container py-6 space-y-6">
         {/* Loaded experiments cards */}
         {experiments.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {experiments.map((exp, idx) => (
               <Card key={exp.id} className="bg-gradient-card border-border">
                 <CardHeader className="pb-2">
@@ -144,7 +153,7 @@ const Comparison = () => {
                 Aucune expérience chargée
               </h3>
               <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
-                Chargez jusqu'à 3 fichiers JSON d'expériences pour comparer leurs résultats côte à côte.
+                Chargez des fichiers JSON d'expériences pour comparer leurs résultats côte à côte.
               </p>
               <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
                 <Upload className="w-4 h-4" />
@@ -156,7 +165,10 @@ const Comparison = () => {
 
         {/* Comparison charts */}
         {experiments.length > 0 && (
-          <ComparisonChart experiments={experiments.map((e) => ({ name: e.name, data: e.data }))} />
+          <>
+            <ComparisonChart experiments={experiments.map((e) => ({ name: e.name, data: e.data }))} />
+            <ComparisonSimilarityMatrix experiments={experiments.map((e) => ({ name: e.name, data: e.data }))} />
+          </>
         )}
       </main>
     </div>

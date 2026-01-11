@@ -25,7 +25,11 @@ const menuItems = [
   },
 ];
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  onNavigate?: () => void;
+}
+
+export function AppSidebar({ onNavigate }: AppSidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
@@ -51,6 +55,7 @@ export function AppSidebar() {
                       to={item.url}
                       className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent"
                       activeClassName="bg-sidebar-accent text-sidebar-primary"
+                      onClick={onNavigate}
                     >
                       <item.icon className="w-4 h-4" />
                       <span>{item.title}</span>
