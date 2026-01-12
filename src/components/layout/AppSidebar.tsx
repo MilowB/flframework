@@ -1,4 +1,4 @@
-import { Network, GitCompare } from 'lucide-react';
+import { Network, GitCompare, FlaskConical } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import {
   Sidebar,
@@ -17,6 +17,11 @@ const menuItems = [
     title: 'FL Framework',
     url: '/',
     icon: Network,
+  },
+  {
+    title: 'Benchmark',
+    url: '/benchmark',
+    icon: FlaskConical,
   },
   {
     title: 'Comparaison d\'expériences',
