@@ -1,3 +1,66 @@
+// Calcule la norme L2 d'un modèle MLP (tous les poids et biais)
+function normMLPWeights(a: MLPWeights): number {
+    let sum = 0;
+    for (let i = 0; i < a.W1.length; i++) {
+        for (let j = 0; j < a.W1[i].length; j++) {
+            sum += a.W1[i][j] * a.W1[i][j];
+        }
+    }
+    for (let i = 0; i < a.W2.length; i++) {
+        for (let j = 0; j < a.W2[i].length; j++) {
+            sum += a.W2[i][j] * a.W2[i][j];
+        }
+    }
+    for (let i = 0; i < a.b1.length; i++) {
+        sum += a.b1[i] * a.b1[i];
+    }
+    for (let i = 0; i < a.b2.length; i++) {
+        sum += a.b2[i] * a.b2[i];
+    }
+    return Math.sqrt(sum);
+}
+// Soustrait deux modèles MLP (élément par élément)
+function substractMLPWeights(a: MLPWeights, b: MLPWeights): MLPWeights {
+    const result = cloneWeights(a);
+    for (let i = 0; i < result.W1.length; i++) {
+        for (let j = 0; j < result.W1[i].length; j++) {
+            result.W1[i][j] = a.W1[i][j] - b.W1[i][j];
+        }
+    }
+    for (let i = 0; i < result.W2.length; i++) {
+        for (let j = 0; j < result.W2[i].length; j++) {
+            result.W2[i][j] = a.W2[i][j] - b.W2[i][j];
+        }
+    }
+    for (let i = 0; i < result.b1.length; i++) {
+        result.b1[i] = a.b1[i] - b.b1[i];
+    }
+    for (let i = 0; i < result.b2.length; i++) {
+        result.b2[i] = a.b2[i] - b.b2[i];
+    }
+    return result;
+}
+// Additionne deux modèles MLP (somme élément par élément)
+function addMLPWeights(a: MLPWeights, b: MLPWeights): MLPWeights {
+    const result = cloneWeights(a);
+    for (let i = 0; i < result.W1.length; i++) {
+        for (let j = 0; j < result.W1[i].length; j++) {
+            result.W1[i][j] = a.W1[i][j] + b.W1[i][j];
+        }
+    }
+    for (let i = 0; i < result.W2.length; i++) {
+        for (let j = 0; j < result.W2[i].length; j++) {
+            result.W2[i][j] = a.W2[i][j] + b.W2[i][j];
+        }
+    }
+    for (let i = 0; i < result.b1.length; i++) {
+        result.b1[i] = a.b1[i] + b.b1[i];
+    }
+    for (let i = 0; i < result.b2.length; i++) {
+        result.b2[i] = a.b2[i] + b.b2[i];
+    }
+    return result;
+}
 // Client Aggregation Strategy: 50/50
 // The client starts training from a 50/50 average between
 // the received server/cluster model and its previous local model.
@@ -78,7 +141,6 @@ export const applyGravityAggregation = (
         w = 1
 
         // --- Modulation par la "vitesse" d'éloignement (distance N-1) ---
-        let v = 0;
         console.log(localModelHistory);
         console.log(receivedModelHistory);
         if (localModelHistory && receivedModelHistory &&
@@ -86,10 +148,16 @@ export const applyGravityAggregation = (
             localModelHistory[1] && receivedModelHistory[1]) {
             const localN1 = unflattenWeights(localModelHistory[1], MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
             const receivedN1 = unflattenWeights(receivedModelHistory[1], MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
-            v = l2DistanceMLP(receivedN1, localN1);
-            const w_final = Math.abs(distance - v);
+            // Somme des deux modèles
+            const sumWeights = addMLPWeights(substractMLPWeights(localN1, receivedN1), substractMLPWeights(localN1, receivedModel));
+            const sumWeightsNorm = normMLPWeights(sumWeights);
+            const va = substractMLPWeights(localN1, receivedModel);
+            const sumVaNorm = normMLPWeights(va);
+            const w_final = sumWeightsNorm - sumVaNorm;
             w = Math.max(0, Math.min(1, w_final));
-            console.log(`Gravity aggregation: distance_N=${distance}, v_N-1=${v}, w_grav=${w + k * v}, w_final=${w}`);
+            console.log('Somme des modèles receivedN1 + receivedModel:', sumWeights);
+            console.log('Norme (longueur) du vecteur sumWeights:', sumWeightsNorm);
+            console.log(`Gravity aggregation: distance_N=${distance}, v_N-1=${va}, w_grav=${w + k * va}, w_final=${w}`);
         } else {
             console.log(`Gravity aggregation: distance_N=${distance}, pas d'historique N-1, w=${w}`);
         }
