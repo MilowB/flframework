@@ -1,0 +1,671 @@
+import React, { useState, useRef, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { Progress } from '@/components/ui/progress';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Play, Square, RotateCcw, Plus, Trash2, ChevronDown, Save, Zap, Users, FlaskConical } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { ServerConfig, FederatedState, ServerStatus } from '@/lib/federated/types';
+import { aggregationMethods } from '@/lib/federated/aggregations';
+import { preloadMNIST, initializeModel, runFederatedRound, createClient, setSeed } from '@/lib/federated/simulation';
+import { saveExperiment } from '@/lib/federated/experimentStorage';
+import { SeededRandom } from '@/lib/federated/core/random';
+
+interface BenchmarkExperiment {
+  id: string;
+  name: string;
+  config: ServerConfig;
+  clientCount: number;
+  isOpen: boolean;
+}
+
+const architectures = [
+  { value: 'mlp-small', label: 'MLP Small' },
+  { value: 'mlp-medium', label: 'MLP Medium' },
+  { value: 'mlp-large', label: 'MLP Large' },
+  { value: 'cnn-simple', label: 'CNN Simple' },
+  { value: 'resnet-mini', label: 'ResNet Mini' },
+];
+
+const defaultConfig: ServerConfig = {
+  aggregationMethod: 'fedavg',
+  clientsPerRound: 6,
+  totalRounds: 5,
+  minClientsRequired: 2,
+  modelArchitecture: 'mlp-small',
+  seed: 42,
+};
+
+const generateId = () => Math.random().toString(36).substring(2, 9);
+
+const Benchmark = () => {
+  const [experiments, setExperiments] = useState<BenchmarkExperiment[]>([
+    {
+      id: generateId(),
+      name: 'Expérience 1',
+      config: { ...defaultConfig },
+      clientCount: 6,
+      isOpen: true,
+    },
+  ]);
+
+  const [masterSeed, setMasterSeed] = useState(42);
+  const [seedCount, setSeedCountState] = useState(3);
+  const [globalClientCount, setGlobalClientCount] = useState(6);
+  
+  const [isRunning, setIsRunning] = useState(false);
+  const [currentExperimentIndex, setCurrentExperimentIndex] = useState(0);
+  const [currentSeedIndex, setCurrentSeedIndex] = useState(0);
+  const [currentRound, setCurrentRound] = useState(0);
+  const [totalRounds, setTotalRounds] = useState(0);
+  const [completedResults, setCompletedResults] = useState<any[]>([]);
+  const [mnistLoaded, setMnistLoaded] = useState(false);
+  
+  const abortRef = useRef(false);
+
+  // Preload MNIST
+  React.useEffect(() => {
+    preloadMNIST().then(() => {
+      setMnistLoaded(true);
+    });
+  }, []);
+
+  const addExperiment = () => {
+    setExperiments(prev => [
+      ...prev,
+      {
+        id: generateId(),
+        name: `Expérience ${prev.length + 1}`,
+        config: { ...defaultConfig },
+        clientCount: globalClientCount,
+        isOpen: true,
+      },
+    ]);
+  };
+
+  const removeExperiment = (id: string) => {
+    if (experiments.length <= 1) {
+      toast.error('Il faut au moins une expérience');
+      return;
+    }
+    setExperiments(prev => prev.filter(e => e.id !== id));
+  };
+
+  const updateExperiment = (id: string, update: Partial<BenchmarkExperiment>) => {
+    setExperiments(prev => prev.map(e => (e.id === id ? { ...e, ...update } : e)));
+  };
+
+  const updateExperimentConfig = (id: string, configUpdate: Partial<ServerConfig>) => {
+    setExperiments(prev =>
+      prev.map(e => (e.id === id ? { ...e, config: { ...e.config, ...configUpdate } } : e))
+    );
+  };
+
+  const toggleExperiment = (id: string) => {
+    setExperiments(prev => prev.map(e => (e.id === id ? { ...e, isOpen: !e.isOpen } : e)));
+  };
+
+  // Generate seeds from master seed
+  const generateSeeds = useCallback((master: number, count: number): number[] => {
+    const rng = new SeededRandom(master);
+    return Array.from({ length: count }, () => rng.nextInt(100000));
+  }, []);
+
+  const startBenchmark = useCallback(async () => {
+    if (!mnistLoaded) {
+      toast.error('MNIST non chargé');
+      return;
+    }
+
+    abortRef.current = false;
+    setIsRunning(true);
+    setCompletedResults([]);
+    setCurrentExperimentIndex(0);
+    setCurrentSeedIndex(0);
+    setCurrentRound(0);
+
+    const seeds = generateSeeds(masterSeed, seedCount);
+    const totalExperiments = experiments.length * seeds.length;
+    let expIdx = 0;
+
+    const results: any[] = [];
+
+    for (let ei = 0; ei < experiments.length; ei++) {
+      if (abortRef.current) break;
+      const experiment = experiments[ei];
+
+      for (let si = 0; si < seeds.length; si++) {
+        if (abortRef.current) break;
+        const seed = seeds[si];
+        
+        setCurrentExperimentIndex(ei);
+        setCurrentSeedIndex(si);
+        setCurrentRound(0);
+        setTotalRounds(experiment.config.totalRounds);
+
+        // Initialize for this run
+        setSeed(seed);
+        const configWithSeed: ServerConfig = { ...experiment.config, seed };
+        const globalModel = initializeModel(configWithSeed.modelArchitecture);
+        const clients = Array.from({ length: experiment.clientCount }, (_, i) => createClient(i));
+
+        let state: FederatedState = {
+          isRunning: true,
+          currentRound: 0,
+          totalRounds: configWithSeed.totalRounds,
+          clients,
+          serverConfig: configWithSeed,
+          roundHistory: [],
+          globalModel,
+          serverStatus: 'idle' as ServerStatus,
+        };
+
+        let clustersForRound: string[][] | undefined = undefined;
+
+        // Run rounds
+        for (let round = 0; round < configWithSeed.totalRounds; round++) {
+          if (abortRef.current) break;
+          setCurrentRound(round + 1);
+
+          try {
+            const [metrics, nextClusters] = await runFederatedRound(
+              { ...state, currentRound: round },
+              (update) => { state = { ...state, ...update }; },
+              () => {},
+              () => {},
+              clustersForRound
+            );
+            clustersForRound = nextClusters;
+            state.roundHistory = [...state.roundHistory, metrics];
+          } catch (error) {
+            console.error('Round failed:', error);
+            break;
+          }
+        }
+
+        // Store result
+        results.push({
+          experimentName: experiment.name,
+          seed,
+          state,
+          clientModels: new Map(), // We don't keep client models for benchmark
+        });
+
+        expIdx++;
+      }
+    }
+
+    setCompletedResults(results);
+    setIsRunning(false);
+    
+    if (!abortRef.current) {
+      toast.success(`Benchmark terminé: ${results.length} expériences`);
+    }
+  }, [experiments, masterSeed, seedCount, mnistLoaded, generateSeeds]);
+
+  const stopBenchmark = () => {
+    abortRef.current = true;
+    setIsRunning(false);
+  };
+
+  const resetBenchmark = () => {
+    abortRef.current = true;
+    setIsRunning(false);
+    setCompletedResults([]);
+    setCurrentExperimentIndex(0);
+    setCurrentSeedIndex(0);
+    setCurrentRound(0);
+  };
+
+  const saveAllResults = () => {
+    if (completedResults.length === 0) {
+      toast.error('Aucun résultat à sauvegarder');
+      return;
+    }
+
+    completedResults.forEach((result, index) => {
+      const { state, clientModels, experimentName, seed } = result;
+      // Create a modified filename based on experiment name and seed
+      const data = {
+        version: '1.0',
+        savedAt: new Date().toISOString(),
+        serverConfig: state.serverConfig,
+        globalModel: state.globalModel,
+        roundHistory: state.roundHistory,
+        clientModels: [],
+        benchmarkMeta: {
+          experimentName,
+          seed,
+        },
+      };
+
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const now = new Date();
+      const timestamp = now.toISOString()
+        .replace(/[:.]/g, '-')
+        .replace('T', '_')
+        .slice(0, 19);
+      const filename = `benchmark-${experimentName.replace(/\s+/g, '-')}-seed${seed}-${timestamp}.json`;
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    toast.success(`${completedResults.length} fichiers téléchargés`);
+  };
+
+  const totalProgress = experiments.length * seedCount;
+  const currentProgress = currentExperimentIndex * seedCount + currentSeedIndex + (currentRound > 0 ? 1 : 0);
+  const progressPercent = totalProgress > 0 ? (currentProgress / totalProgress) * 100 : 0;
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
+        <div className="container py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+                <FlaskConical className="w-5 h-5 text-primary" />
+                Benchmark
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {mnistLoaded ? 'MNIST chargé' : 'Chargement MNIST...'} — {experiments.length} expérience(s), {seedCount} seed(s)
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="container py-6 space-y-6">
+        {/* Control Panel */}
+        <div className="p-6 rounded-xl bg-gradient-card border border-border shadow-card">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            {/* Left: Controls */}
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={isRunning ? stopBenchmark : startBenchmark}
+                disabled={!mnistLoaded}
+                className={cn(
+                  'gap-2 min-w-[140px] font-medium transition-all',
+                  isRunning 
+                    ? 'bg-destructive hover:bg-destructive/90' 
+                    : 'bg-gradient-primary hover:opacity-90'
+                )}
+              >
+                {isRunning ? (
+                  <>
+                    <Square className="w-4 h-4" />
+                    Arrêter
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" />
+                    Démarrer
+                  </>
+                )}
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={resetBenchmark}
+                disabled={isRunning}
+                className="gap-2"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Réinitialiser
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={saveAllResults}
+                disabled={isRunning || completedResults.length === 0}
+                className="gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Sauvegarder ({completedResults.length})
+              </Button>
+            </div>
+
+            {/* Center: Progress */}
+            <div className="flex-1 max-w-md">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-muted-foreground">Progression globale</span>
+                <span className="font-mono text-sm">
+                  Exp <span className="text-primary">{currentExperimentIndex + 1}</span>/{experiments.length} 
+                  {' '}— Seed <span className="text-primary">{currentSeedIndex + 1}</span>/{seedCount}
+                  {' '}— Round <span className="text-primary">{currentRound}</span>/{totalRounds}
+                </span>
+              </div>
+              <Progress value={progressPercent} className="h-2" />
+            </div>
+
+            {/* Right: Client Count & Seeds */}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-4 min-w-[160px]">
+                <Users className="w-5 h-5 text-muted-foreground" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-sm text-muted-foreground">Clients</Label>
+                    <span className="font-mono text-sm text-primary">{globalClientCount}</span>
+                  </div>
+                  <Slider
+                    value={[globalClientCount]}
+                    onValueChange={([value]) => setGlobalClientCount(value)}
+                    min={2}
+                    max={12}
+                    step={1}
+                    disabled={isRunning}
+                    className="[&_[role=slider]]:bg-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Label className="text-sm text-muted-foreground whitespace-nowrap">Seeds</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={seedCount}
+                  onChange={e => setSeedCountState(Math.max(1, Math.min(20, Number(e.target.value))))}
+                  disabled={isRunning}
+                  className="w-16"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Label className="text-sm text-muted-foreground whitespace-nowrap">Master Seed</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={masterSeed}
+                  onChange={e => setMasterSeed(Number(e.target.value))}
+                  disabled={isRunning}
+                  className="w-24"
+                />
+              </div>
+            </div>
+
+            {/* Status Indicator */}
+            {isRunning && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30">
+                <Zap className="w-4 h-4 text-primary animate-pulse" />
+                <span className="text-sm font-medium text-primary">En cours</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Experiment Panels */}
+        <div className="space-y-4">
+          {experiments.map((experiment, index) => (
+            <ExperimentPanel
+              key={experiment.id}
+              experiment={experiment}
+              index={index}
+              disabled={isRunning}
+              onToggle={() => toggleExperiment(experiment.id)}
+              onRemove={() => removeExperiment(experiment.id)}
+              onUpdateName={(name) => updateExperiment(experiment.id, { name })}
+              onUpdateConfig={(config) => updateExperimentConfig(experiment.id, config)}
+              onUpdateClientCount={(count) => updateExperiment(experiment.id, { clientCount: count })}
+            />
+          ))}
+
+          {/* Add Experiment Button */}
+          <Button
+            variant="outline"
+            onClick={addExperiment}
+            disabled={isRunning}
+            className="w-full gap-2 border-dashed h-14"
+          >
+            <Plus className="w-5 h-5" />
+            Ajouter une expérience
+          </Button>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+interface ExperimentPanelProps {
+  experiment: BenchmarkExperiment;
+  index: number;
+  disabled: boolean;
+  onToggle: () => void;
+  onRemove: () => void;
+  onUpdateName: (name: string) => void;
+  onUpdateConfig: (config: Partial<ServerConfig>) => void;
+  onUpdateClientCount: (count: number) => void;
+}
+
+const ExperimentPanel = ({
+  experiment,
+  index,
+  disabled,
+  onToggle,
+  onRemove,
+  onUpdateName,
+  onUpdateConfig,
+  onUpdateClientCount,
+}: ExperimentPanelProps) => {
+  const { config } = experiment;
+
+  return (
+    <Collapsible open={experiment.isOpen} onOpenChange={onToggle}>
+      <Card className="bg-gradient-card border-border shadow-card">
+        <CollapsibleTrigger asChild>
+          <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <span className="text-sm font-bold text-primary">{index + 1}</span>
+                </div>
+                <Input
+                  value={experiment.name}
+                  onChange={e => onUpdateName(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                  disabled={disabled}
+                  className="w-48 bg-transparent border-transparent hover:border-border focus:border-primary"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove();
+                  }}
+                  disabled={disabled}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+                <ChevronDown className={cn(
+                  'w-5 h-5 text-muted-foreground transition-transform',
+                  experiment.isOpen && 'rotate-180'
+                )} />
+              </div>
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+
+        <CollapsibleContent>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Model Architecture */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Architecture</Label>
+                <Select
+                  value={config.modelArchitecture}
+                  onValueChange={(value) => onUpdateConfig({ modelArchitecture: value })}
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="bg-muted/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {architectures.map((arch) => (
+                      <SelectItem key={arch.value} value={arch.value}>
+                        {arch.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Server Aggregation */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Agrégation serveur</Label>
+                <Select
+                  value={config.aggregationMethod}
+                  onValueChange={(value: ServerConfig['aggregationMethod']) =>
+                    onUpdateConfig({ aggregationMethod: value })
+                  }
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="bg-muted/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(aggregationMethods).map(([key, method]) => (
+                      <SelectItem key={key} value={key}>
+                        {method.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Client Aggregation */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Agrégation client</Label>
+                <Select
+                  value={config.clientAggregationMethod ?? 'none'}
+                  onValueChange={(value: 'none' | '50-50' | 'gravity') =>
+                    onUpdateConfig({ clientAggregationMethod: value })
+                  }
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="bg-muted/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="50-50">50/50</SelectItem>
+                    <SelectItem value="gravity">Gravité</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Model Assignment */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Affectation modèle</Label>
+                <Select
+                  value={config.modelAssignmentMethod ?? '1NN'}
+                  onValueChange={(value: '1NN' | 'Probabiliste') =>
+                    onUpdateConfig({ modelAssignmentMethod: value })
+                  }
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="bg-muted/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1NN">1NN</SelectItem>
+                    <SelectItem value="Probabiliste">Probabiliste</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Total Rounds */}
+              <div className="space-y-2">
+                <Label className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Rounds</span>
+                  <span className="font-mono text-primary">{config.totalRounds}</span>
+                </Label>
+                <Slider
+                  value={[config.totalRounds]}
+                  onValueChange={([value]) => onUpdateConfig({ totalRounds: value })}
+                  min={1}
+                  max={50}
+                  step={1}
+                  disabled={disabled}
+                  className="[&_[role=slider]]:bg-primary"
+                />
+              </div>
+
+              {/* Clients per Round */}
+              <div className="space-y-2">
+                <Label className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Clients/round</span>
+                  <span className="font-mono text-primary">{config.clientsPerRound}</span>
+                </Label>
+                <Slider
+                  value={[config.clientsPerRound]}
+                  onValueChange={([value]) => onUpdateConfig({ clientsPerRound: value })}
+                  min={1}
+                  max={10}
+                  step={1}
+                  disabled={disabled}
+                  className="[&_[role=slider]]:bg-primary"
+                />
+              </div>
+
+              {/* Min Clients */}
+              <div className="space-y-2">
+                <Label className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Clients min</span>
+                  <span className="font-mono text-primary">{config.minClientsRequired}</span>
+                </Label>
+                <Slider
+                  value={[config.minClientsRequired]}
+                  onValueChange={([value]) => onUpdateConfig({ minClientsRequired: value })}
+                  min={1}
+                  max={config.clientsPerRound}
+                  step={1}
+                  disabled={disabled}
+                  className="[&_[role=slider]]:bg-primary"
+                />
+              </div>
+
+              {/* Client Count (per experiment) */}
+              <div className="space-y-2">
+                <Label className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Nb clients</span>
+                  <span className="font-mono text-primary">{experiment.clientCount}</span>
+                </Label>
+                <Slider
+                  value={[experiment.clientCount]}
+                  onValueChange={([value]) => onUpdateClientCount(value)}
+                  min={2}
+                  max={12}
+                  step={1}
+                  disabled={disabled}
+                  className="[&_[role=slider]]:bg-primary"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+};
+
+export default Benchmark;
