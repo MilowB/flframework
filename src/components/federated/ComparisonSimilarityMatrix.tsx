@@ -163,7 +163,9 @@ const SingleMatrix = ({ name, expIdx, roundData }: SingleMatrixProps) => {
                 backgroundColor: valueToColor(v),
                 border: '1px solid rgba(0,0,0,0.06)'
               }}
-            />
+            >
+              <span style={{fontSize: '11px', fontWeight: 500}}>{(v*100).toFixed(1)}</span>
+            </div>
           )))}
         </div>
       </div>

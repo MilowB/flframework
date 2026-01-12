@@ -151,13 +151,12 @@ export const applyGravityAggregation = (
             // Somme des deux modèles
             const sumWeights = addMLPWeights(substractMLPWeights(localN1, receivedN1), substractMLPWeights(localN1, receivedModel));
             const sumWeightsNorm = normMLPWeights(sumWeights);
-            const va = substractMLPWeights(localN1, receivedModel);
-            const sumVaNorm = normMLPWeights(va);
-            const w_final = sumWeightsNorm - sumVaNorm;
-            w = Math.max(0, Math.min(1, w_final));
+            const vb = substractMLPWeights(localN1, receivedModel);
+            const sumVbNorm = normMLPWeights(vb);
+            w = sumVbNorm / (sumVbNorm + sumWeightsNorm);
             console.log('Somme des modèles receivedN1 + receivedModel:', sumWeights);
             console.log('Norme (longueur) du vecteur sumWeights:', sumWeightsNorm);
-            console.log(`Gravity aggregation: distance_N=${distance}, v_N-1=${va}, w_grav=${w + k * va}, w_final=${w}`);
+            console.log(`Gravity aggregation: distance_N=${distance}, v_N-1=${vb}, w_final=${w}`);
         } else {
             console.log(`Gravity aggregation: distance_N=${distance}, pas d'historique N-1, w=${w}`);
         }
