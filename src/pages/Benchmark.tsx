@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Play, Square, RotateCcw, Plus, Trash2, ChevronDown, Save, Zap, Users, FlaskConical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -16,12 +17,55 @@ import { preloadMNIST, initializeModel, runFederatedRound, createClient, setSeed
 import { saveExperiment } from '@/lib/federated/experimentStorage';
 import { SeededRandom } from '@/lib/federated/core/random';
 
+// Strategy hyperparameters types
+interface NoneHyperparams {
+  dynamicData: boolean;
+  dynamicClient?: number;
+  receiverClient?: number;
+  changeRound?: number;
+}
+
+interface FiftyFiftyHyperparams {
+  dynamicData: boolean;
+  dynamicClient?: number;
+  receiverClient?: number;
+  changeRound?: number;
+}
+
+interface GravityHyperparams {
+  gravitationConstant: number;
+  clusterWeight: number;
+  clientWeight: number;
+  dynamicData: boolean;
+  dynamicClient?: number;
+  receiverClient?: number;
+  changeRound?: number;
+}
+
+interface StrategyHyperparams {
+  none: NoneHyperparams;
+  fiftyFifty: FiftyFiftyHyperparams;
+  gravity: GravityHyperparams;
+}
+
+const defaultStrategyHyperparams: StrategyHyperparams = {
+  none: { dynamicData: false },
+  fiftyFifty: { dynamicData: false },
+  gravity: {
+    gravitationConstant: 1.0,
+    clusterWeight: 1.0,
+    clientWeight: 1.0,
+    dynamicData: false,
+  },
+};
+
 interface BenchmarkExperiment {
   id: string;
   name: string;
   config: ServerConfig;
   clientCount: number;
   isOpen: boolean;
+  strategyHyperparams: StrategyHyperparams;
 }
 
 const architectures = [
@@ -51,6 +95,7 @@ const Benchmark = () => {
       config: { ...defaultConfig },
       clientCount: 6,
       isOpen: true,
+      strategyHyperparams: { ...defaultStrategyHyperparams },
     },
   ]);
 
@@ -84,6 +129,7 @@ const Benchmark = () => {
         config: { ...defaultConfig },
         clientCount: globalClientCount,
         isOpen: true,
+        strategyHyperparams: { ...defaultStrategyHyperparams },
       },
     ]);
   };
@@ -423,6 +469,7 @@ const Benchmark = () => {
               onUpdateName={(name) => updateExperiment(experiment.id, { name })}
               onUpdateConfig={(config) => updateExperimentConfig(experiment.id, config)}
               onUpdateClientCount={(count) => updateExperiment(experiment.id, { clientCount: count })}
+              onUpdateStrategyHyperparams={(strategyHyperparams) => updateExperiment(experiment.id, { strategyHyperparams })}
             />
           ))}
 
@@ -451,6 +498,7 @@ interface ExperimentPanelProps {
   onUpdateName: (name: string) => void;
   onUpdateConfig: (config: Partial<ServerConfig>) => void;
   onUpdateClientCount: (count: number) => void;
+  onUpdateStrategyHyperparams: (hyperparams: StrategyHyperparams) => void;
 }
 
 const ExperimentPanel = ({
@@ -462,8 +510,31 @@ const ExperimentPanel = ({
   onUpdateName,
   onUpdateConfig,
   onUpdateClientCount,
+  onUpdateStrategyHyperparams,
 }: ExperimentPanelProps) => {
-  const { config } = experiment;
+  const { config, strategyHyperparams } = experiment;
+  const clientAggMethod = config.clientAggregationMethod ?? 'none';
+
+  const updateNoneParams = (update: Partial<NoneHyperparams>) => {
+    onUpdateStrategyHyperparams({
+      ...strategyHyperparams,
+      none: { ...strategyHyperparams.none, ...update },
+    });
+  };
+
+  const updateFiftyFiftyParams = (update: Partial<FiftyFiftyHyperparams>) => {
+    onUpdateStrategyHyperparams({
+      ...strategyHyperparams,
+      fiftyFifty: { ...strategyHyperparams.fiftyFifty, ...update },
+    });
+  };
+
+  const updateGravityParams = (update: Partial<GravityHyperparams>) => {
+    onUpdateStrategyHyperparams({
+      ...strategyHyperparams,
+      gravity: { ...strategyHyperparams.gravity, ...update },
+    });
+  };
 
   return (
     <Collapsible open={experiment.isOpen} onOpenChange={onToggle}>
@@ -661,6 +732,186 @@ const ExperimentPanel = ({
                 />
               </div>
             </div>
+
+            {/* Strategy Hyperparameters Panel */}
+            {clientAggMethod === 'none' && (
+              <div className="mt-6 p-4 rounded-lg border border-primary/30 bg-primary/5">
+                <h4 className="text-sm font-medium mb-4 text-primary">None – Hyperparamètres</h4>
+                <div className="flex items-center gap-3 mb-4">
+                  <Switch 
+                    checked={strategyHyperparams.none.dynamicData} 
+                    onCheckedChange={v => updateNoneParams({ dynamicData: v })} 
+                    disabled={disabled}
+                  />
+                  <Label className="text-sm">Données dynamiques</Label>
+                </div>
+                {strategyHyperparams.none.dynamicData && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Client dynamique</Label>
+                      <Input 
+                        type="number" 
+                        value={strategyHyperparams.none.dynamicClient ?? ''} 
+                        onChange={e => updateNoneParams({ dynamicClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Paquet de données</Label>
+                      <Input 
+                        type="number" 
+                        value={strategyHyperparams.none.receiverClient ?? ''} 
+                        onChange={e => updateNoneParams({ receiverClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Round de changement</Label>
+                      <Input 
+                        type="number" 
+                        value={strategyHyperparams.none.changeRound ?? ''} 
+                        onChange={e => updateNoneParams({ changeRound: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {clientAggMethod === '50-50' && (
+              <div className="mt-6 p-4 rounded-lg border border-primary/30 bg-primary/5">
+                <h4 className="text-sm font-medium mb-4 text-primary">50/50 – Hyperparamètres</h4>
+                <div className="flex items-center gap-3 mb-4">
+                  <Switch 
+                    checked={strategyHyperparams.fiftyFifty.dynamicData} 
+                    onCheckedChange={v => updateFiftyFiftyParams({ dynamicData: v })} 
+                    disabled={disabled}
+                  />
+                  <Label className="text-sm">Données dynamiques</Label>
+                </div>
+                {strategyHyperparams.fiftyFifty.dynamicData && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Client dynamique</Label>
+                      <Input 
+                        type="number" 
+                        value={strategyHyperparams.fiftyFifty.dynamicClient ?? ''} 
+                        onChange={e => updateFiftyFiftyParams({ dynamicClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Paquet de données</Label>
+                      <Input 
+                        type="number" 
+                        value={strategyHyperparams.fiftyFifty.receiverClient ?? ''} 
+                        onChange={e => updateFiftyFiftyParams({ receiverClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Round de changement</Label>
+                      <Input 
+                        type="number" 
+                        value={strategyHyperparams.fiftyFifty.changeRound ?? ''} 
+                        onChange={e => updateFiftyFiftyParams({ changeRound: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {clientAggMethod === 'gravity' && (
+              <div className="mt-6 p-4 rounded-lg border border-primary/30 bg-primary/5">
+                <h4 className="text-sm font-medium mb-4 text-primary">Gravité – Hyperparamètres</h4>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Constante gravitation (G)</Label>
+                    <Input 
+                      type="number" 
+                      step="any"
+                      value={strategyHyperparams.gravity.gravitationConstant} 
+                      onChange={e => updateGravityParams({ gravitationConstant: parseFloat(e.target.value) })} 
+                      disabled={disabled}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Poids du cluster</Label>
+                    <Input 
+                      type="number" 
+                      step="any"
+                      value={strategyHyperparams.gravity.clusterWeight} 
+                      onChange={e => updateGravityParams({ clusterWeight: parseFloat(e.target.value) })} 
+                      disabled={disabled}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Poids du client</Label>
+                    <Input 
+                      type="number" 
+                      step="any"
+                      value={strategyHyperparams.gravity.clientWeight} 
+                      onChange={e => updateGravityParams({ clientWeight: parseFloat(e.target.value) })} 
+                      disabled={disabled}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <Switch 
+                    checked={strategyHyperparams.gravity.dynamicData} 
+                    onCheckedChange={v => updateGravityParams({ dynamicData: v })} 
+                    disabled={disabled}
+                  />
+                  <Label className="text-sm">Données dynamiques</Label>
+                </div>
+                {strategyHyperparams.gravity.dynamicData && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Client dynamique</Label>
+                      <Input 
+                        type="number" 
+                        value={strategyHyperparams.gravity.dynamicClient ?? ''} 
+                        onChange={e => updateGravityParams({ dynamicClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Paquet de données</Label>
+                      <Input 
+                        type="number" 
+                        value={strategyHyperparams.gravity.receiverClient ?? ''} 
+                        onChange={e => updateGravityParams({ receiverClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Round de changement</Label>
+                      <Input 
+                        type="number" 
+                        value={strategyHyperparams.gravity.changeRound ?? ''} 
+                        onChange={e => updateGravityParams({ changeRound: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Card>
