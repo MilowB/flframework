@@ -6,6 +6,7 @@ import { loadExperiment, type ExperimentData } from '@/lib/federated/results/exp
 import { useToast } from '@/hooks/use-toast';
 import { ComparisonChart } from '@/components/federated/ComparisonChart';
 import { ComparisonSimilarityMatrix } from '@/components/federated/ComparisonSimilarityMatrix';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 
 interface LoadedExperiment {
   id: string;
@@ -65,16 +66,19 @@ const Comparison = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-12 z-30 border-b border-border bg-background/80 backdrop-blur-lg">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
         <div className="container py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-foreground">
-                Comparaison d'expériences
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Chargez des fichiers d'expériences pour comparer les résultats
-              </p>
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="h-8 w-8" />
+              <div>
+                <h1 className="text-xl font-bold text-foreground">
+                  Comparaison d'expériences
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Chargez des fichiers d'expériences pour comparer les résultats
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <input
