@@ -17,10 +17,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <AppSidebar onNavigate={handleNavigation} />
       <SidebarInset>
-        <header className="sticky top-0 z-40 flex h-12 items-center gap-4 border-b border-border bg-background/80 backdrop-blur-lg px-4">
-          <SidebarTrigger />
-          <span className="text-sm font-medium text-muted-foreground">FL Framework</span>
-        </header>
         {children}
       </SidebarInset>
     </SidebarProvider>

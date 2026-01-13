@@ -11,7 +11,8 @@ import { CodePreview } from '@/components/federated/CodePreview';
 import { ExperimentControls } from '@/components/federated/ExperimentControls';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Network, LayoutGrid, Code } from 'lucide-react';
+import { Network, LayoutGrid, Code, Menu } from 'lucide-react';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { StrategyHyperparamsProvider } from '@/components/federated/StrategyHyperparamsProvider';
 import { useStrategyHyperparams } from '@/components/federated/StrategyHyperparamsContext';
 import GravityPanel from '@/components/federated/GravityPanel';
@@ -48,13 +49,16 @@ const IndexContent = () => {
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
         <div className="container py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-foreground">
-                Federated Learning Framework
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                MNIST Classification — {mnistLoaded ? '60,000 images chargées' : 'Chargement MNIST...'}
-              </p>
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="h-8 w-8" />
+              <div>
+                <h1 className="text-xl font-bold text-foreground">
+                  Federated Learning Framework
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  MNIST Classification — {mnistLoaded ? '60,000 images chargées' : 'Chargement MNIST...'}
+                </p>
+              </div>
             </div>
             <ExperimentControls
               state={state}

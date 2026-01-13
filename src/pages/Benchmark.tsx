@@ -9,6 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Play, Square, RotateCcw, Plus, Trash2, ChevronDown, Save, Zap, Users, FlaskConical } from 'lucide-react';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ServerConfig, FederatedState, ServerStatus, RoundMetrics, ClusterMetrics, ClientRoundMetrics } from '@/lib/federated/types';
@@ -406,14 +407,17 @@ const Benchmark = () => {
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
         <div className="container py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-                <FlaskConical className="w-5 h-5 text-primary" />
-                Benchmark
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {mnistLoaded ? 'MNIST chargé' : 'Chargement MNIST...'} — {experiments.length} expérience(s), {seedCount} seed(s)
-              </p>
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="h-8 w-8" />
+              <div>
+                <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <FlaskConical className="w-5 h-5 text-primary" />
+                  Benchmark
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  {mnistLoaded ? 'MNIST chargé' : 'Chargement MNIST...'} — {experiments.length} expérience(s), {seedCount} seed(s)
+                </p>
+              </div>
             </div>
           </div>
         </div>
