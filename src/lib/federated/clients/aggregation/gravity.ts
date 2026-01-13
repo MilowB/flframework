@@ -156,12 +156,14 @@ export const applyGravityAggregation = (
             const sumVbNorm = normMLPWeights(vb);
             w = sumVbNorm / (sumVbNorm + sumWeightsNorm);
 
-            const distance = substractMLPWeights(localN1, receivedN1);
-            const distance2 = substractMLPWeights(localN1, receivedModel);
-            if(distance > distance2)
+            const distanceVec = substractMLPWeights(localN1, receivedN1);
+            const distance2Vec = substractMLPWeights(localN1, receivedModel);
+            const distanceNorm = normMLPWeights(distanceVec);
+            const distance2Norm = normMLPWeights(distance2Vec);
+            if(distanceNorm > distance2Norm)
                 w = 1
             else w = 0;
-            w = distance / distance2;
+            w = distance2Norm > 0 ? distanceNorm / distance2Norm : 0;
             if(w > 1) w = Math.max(0.5, Math.min(1, w));
             /*const sumWeights = addMLPWeights(substractMLPWeights(localN1, receivedN1), substractMLPWeights(localN1, receivedModel));
             const vdistance = substractMLPWeights(localN1, receivedModel);

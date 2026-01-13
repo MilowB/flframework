@@ -11,10 +11,10 @@ import { Switch } from '@/components/ui/switch';
 import { Play, Square, RotateCcw, Plus, Trash2, ChevronDown, Save, Zap, Users, FlaskConical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { ServerConfig, FederatedState, ServerStatus } from '@/lib/federated/types';
+import { ServerConfig, FederatedState, ServerStatus, RoundMetrics, ClusterMetrics, ClientRoundMetrics } from '@/lib/federated/types';
 import { aggregationMethods } from '@/lib/federated/aggregations';
 import { preloadMNIST, initializeModel, runFederatedRound, createClient, setSeed } from '@/lib/federated/simulation';
-import { saveExperiment } from '@/lib/federated/experimentStorage';
+import { saveExperiment, ExperimentData } from '@/lib/federated/experimentStorage';
 import { SeededRandom } from '@/lib/federated/core/random';
 
 // Strategy hyperparameters types
@@ -179,11 +179,13 @@ const Benchmark = () => {
     const totalExperiments = experiments.length * seeds.length;
     let expIdx = 0;
 
-    const results: any[] = [];
+    // Group results by experiment for averaging
+    const experimentResults: Map<string, { experiment: BenchmarkExperiment; seedResults: FederatedState[] }> = new Map();
 
     for (let ei = 0; ei < experiments.length; ei++) {
       if (abortRef.current) break;
       const experiment = experiments[ei];
+      const seedStates: FederatedState[] = [];
 
       for (let si = 0; si < seeds.length; si++) {
         if (abortRef.current) break;
@@ -234,23 +236,29 @@ const Benchmark = () => {
           }
         }
 
-        // Store result
-        results.push({
-          experimentName: experiment.name,
-          seed,
-          state,
-          clientModels: new Map(), // We don't keep client models for benchmark
-        });
-
-        expIdx++;
+        seedStates.push(state);
       }
+
+      experimentResults.set(experiment.id, { experiment, seedResults: seedStates });
     }
 
-    setCompletedResults(results);
+    // Convert to averaged results
+    const averagedResults = Array.from(experimentResults.entries()).map(([expId, { experiment, seedResults }]) => {
+      return {
+        experimentId: expId,
+        experimentName: experiment.name,
+        config: experiment.config,
+        clientCount: experiment.clientCount,
+        seedCount: seedResults.length,
+        seedResults,
+      };
+    });
+
+    setCompletedResults(averagedResults);
     setIsRunning(false);
     
     if (!abortRef.current) {
-      toast.success(`Benchmark terminé: ${results.length} expériences`);
+      toast.success(`Benchmark terminé: ${averagedResults.length} expériences moyennées`);
     }
   }, [experiments, masterSeed, seedCount, mnistLoaded, generateSeeds]);
 
@@ -268,26 +276,101 @@ const Benchmark = () => {
     setCurrentRound(0);
   };
 
+  // Average round metrics across seeds
+  const averageRoundHistory = (seedResults: FederatedState[]): RoundMetrics[] => {
+    if (seedResults.length === 0) return [];
+    
+    const maxRounds = Math.max(...seedResults.map(s => s.roundHistory.length));
+    const averaged: RoundMetrics[] = [];
+    
+    for (let r = 0; r < maxRounds; r++) {
+      const roundData = seedResults
+        .map(s => s.roundHistory[r])
+        .filter(Boolean);
+      
+      if (roundData.length === 0) continue;
+      
+      // Average global metrics
+      const avgLoss = roundData.reduce((sum, rd) => sum + rd.globalLoss, 0) / roundData.length;
+      const avgAccuracy = roundData.reduce((sum, rd) => sum + rd.globalAccuracy, 0) / roundData.length;
+      const avgSilhouette = roundData.reduce((sum, rd) => sum + (rd.silhouetteAvg || 0), 0) / roundData.length;
+      
+      // Average cluster metrics
+      let avgClusterMetrics: ClusterMetrics[] | undefined;
+      const allClusterMetrics = roundData.filter(rd => rd.clusterMetrics).map(rd => rd.clusterMetrics!);
+      if (allClusterMetrics.length > 0) {
+        const clusterCount = Math.max(...allClusterMetrics.map(cm => cm.length));
+        avgClusterMetrics = [];
+        for (let c = 0; c < clusterCount; c++) {
+          const clusterData = allClusterMetrics.map(cm => cm[c]).filter(Boolean);
+          if (clusterData.length > 0) {
+            avgClusterMetrics.push({
+              clusterId: c,
+              accuracy: clusterData.reduce((sum, cd) => sum + cd.accuracy, 0) / clusterData.length,
+              clientIds: clusterData[0].clientIds,
+            });
+          }
+        }
+      }
+      
+      // Average client metrics
+      let avgClientMetrics: ClientRoundMetrics[] | undefined;
+      const allClientMetrics = roundData.filter(rd => rd.clientMetrics).map(rd => rd.clientMetrics!);
+      if (allClientMetrics.length > 0) {
+        const clientIds = [...new Set(allClientMetrics.flatMap(cm => cm.map(c => c.clientId)))];
+        avgClientMetrics = clientIds.map(clientId => {
+          const clientData = allClientMetrics
+            .flatMap(cm => cm.filter(c => c.clientId === clientId));
+          return {
+            clientId,
+            clientName: clientData[0]?.clientName || clientId,
+            loss: clientData.reduce((sum, cd) => sum + cd.loss, 0) / clientData.length,
+            accuracy: clientData.reduce((sum, cd) => sum + cd.accuracy, 0) / clientData.length,
+            testAccuracy: clientData.reduce((sum, cd) => sum + cd.testAccuracy, 0) / clientData.length,
+          };
+        });
+      }
+      
+      averaged.push({
+        round: r + 1,
+        globalLoss: avgLoss,
+        globalAccuracy: avgAccuracy,
+        participatingClients: roundData[0].participatingClients,
+        aggregationTime: roundData.reduce((sum, rd) => sum + rd.aggregationTime, 0) / roundData.length,
+        timestamp: Date.now(),
+        silhouetteAvg: avgSilhouette,
+        clusterMetrics: avgClusterMetrics,
+        clientMetrics: avgClientMetrics,
+        distanceMatrix: roundData[0].distanceMatrix,
+        clusters: roundData[0].clusters,
+      });
+    }
+    
+    return averaged;
+  };
+
   const saveAllResults = () => {
     if (completedResults.length === 0) {
       toast.error('Aucun résultat à sauvegarder');
       return;
     }
 
-    completedResults.forEach((result, index) => {
-      const { state, clientModels, experimentName, seed } = result;
-      // Create a modified filename based on experiment name and seed
-      const data = {
+    completedResults.forEach((result) => {
+      const { experimentName, config, seedResults, seedCount: numSeeds } = result;
+      
+      // Average the round history across all seeds
+      const averagedRoundHistory = averageRoundHistory(seedResults);
+      
+      // Use the global model from the last seed (or first available)
+      const lastState = seedResults[seedResults.length - 1];
+      
+      const data: ExperimentData = {
         version: '1.0',
         savedAt: new Date().toISOString(),
-        serverConfig: state.serverConfig,
-        globalModel: state.globalModel,
-        roundHistory: state.roundHistory,
+        serverConfig: config,
+        globalModel: lastState?.globalModel || null,
+        roundHistory: averagedRoundHistory,
         clientModels: [],
-        benchmarkMeta: {
-          experimentName,
-          seed,
-        },
       };
 
       const json = JSON.stringify(data, null, 2);
@@ -299,7 +382,7 @@ const Benchmark = () => {
         .replace(/[:.]/g, '-')
         .replace('T', '_')
         .slice(0, 19);
-      const filename = `benchmark-${experimentName.replace(/\s+/g, '-')}-seed${seed}-${timestamp}.json`;
+      const filename = `benchmark-${experimentName.replace(/\s+/g, '-')}-avg${numSeeds}seeds-${timestamp}.json`;
       
       const a = document.createElement('a');
       a.href = url;
@@ -310,7 +393,7 @@ const Benchmark = () => {
       URL.revokeObjectURL(url);
     });
 
-    toast.success(`${completedResults.length} fichiers téléchargés`);
+    toast.success(`${completedResults.length} fichiers moyennés téléchargés`);
   };
 
   const totalProgress = experiments.length * seedCount;
