@@ -40,7 +40,7 @@ export const initializeModel = (architecture: string): ModelWeights => {
   );
   mlpWeightsStore.set('global', mlpWeights);
   resetStores();
-  
+
   const flat = flattenWeights(mlpWeights);
   return {
     layers: flat.layers,
@@ -60,6 +60,7 @@ export const initializeModel = (architecture: string): ModelWeights => {
  * @returns [RoundMetrics, clustersForRound]
  */
 export const runFederatedRound = async (
+    // Dictionnaire pour stocker le modèle envoyé à chaque client
   state: FederatedState,
   onStateUpdate: (state: Partial<FederatedState>) => void,
   onClientUpdate: (clientId: string, update: Partial<ClientState>) => void,
@@ -67,7 +68,7 @@ export const runFederatedRound = async (
   clustersForRound?: string[][]
 ): Promise<[RoundMetrics, string[][] | undefined]> => {
   const { serverConfig, clients, globalModel, currentRound } = state;
-  
+
   if (!globalModel) {
     throw new Error('Global model not initialized');
   }
@@ -78,7 +79,7 @@ export const runFederatedRound = async (
   }
 
   const selectedClients = selectClients(clients, serverConfig.clientsPerRound);
-  
+
   if (selectedClients.length < serverConfig.minClientsRequired) {
     throw new Error(`Not enough clients available. Required: ${serverConfig.minClientsRequired}, Available: ${selectedClients.length}`);
   }
@@ -96,6 +97,7 @@ export const runFederatedRound = async (
 
   // Phase 2: Clients train
   onServerStatusUpdate('waiting');
+  let modelsSentToClients = {};
   const trainingPromises = selectedClients.map(async (client) => {
     onClientUpdate(client.id, { status: 'training', progress: 0 });
     // Fallback: if clustersForRound is not initialized, use only the global model
@@ -115,6 +117,8 @@ export const runFederatedRound = async (
     }
 
     const modelAssignmentMethod = serverConfig.modelAssignmentMethod || '1NN';
+
+    // Modèle envoyé au client par le serveur
     const modelToSend = applyAssignment(
       modelAssignmentMethod,
       client,
@@ -127,7 +131,9 @@ export const runFederatedRound = async (
         round: currentRound,
       }
     );
-    
+    // Stocker dans le dictionnaire pour ce client
+    modelsSentToClients[client.id] = modelToSend;
+
     const result = await simulateClientTraining(
       client,
       modelToSend,
@@ -147,11 +153,57 @@ export const runFederatedRound = async (
 
   const trainedClients = await Promise.all(trainingPromises);
 
+  /*
   // Phase 3: Receive models
   onServerStatusUpdate('receiving');
   for (const { result, client } of trainedClients) {
     await new Promise(resolve => setTimeout(resolve, 200));
     clientResults.push({ weights: result.weights, dataSize: client.dataSize });
+    clientMetricsForRound.push({
+      clientId: client.id,
+      clientName: client.name,
+      loss: result.loss,
+      accuracy: result.accuracy,
+      testAccuracy: result.testAccuracy,
+    });
+    onClientUpdate(client.id, {
+      status: 'completed',
+      lastUpdate: Date.now(),
+      roundsParticipated: client.roundsParticipated + 1,
+    });
+  }
+  */
+
+  // Phase 3: Receive models
+  onServerStatusUpdate('receiving');
+  for (let i = 0; i < trainedClients.length; i++) {
+    const { result, client } = trainedClients[i];
+    let weightsToUse = result.weights;
+
+    // HARDCODE DE STRATEGIE GRAVITY
+    /*
+    await new Promise(resolve => setTimeout(resolve, 200));
+    // Gravity: dès le round 5, utiliser le modèle de cluster envoyé par le serveur (sans fine-tuning)
+    if (serverConfig.clientAggregationMethod === 'gravity' && currentRound >= 5 && client.id==="client-0") {
+      console.log("je suis le client " + client.id);
+      // On récupère le modèle envoyé au client depuis le dictionnaire
+      if (modelsSentToClients[client.id]) {
+        weightsToUse = modelsSentToClients[client.id];
+        console.log("Le client retourne le modèle reçu sans fine-tuning");
+      } else if (modelsSentToClients[client.id]) {
+        weightsToUse = modelsSentToClients[client.id];
+        console.log("Le client retourne le modèle reçu sans fine-tuning");
+      } else {
+        // Fallback: on ne peut pas retrouver le modèle envoyé, on garde le modèle local
+        console.log("Le client retourne le modèle fine-tuné");
+        weightsToUse = result.weights;
+      }
+    }
+    else console.log("Le client retourne le modèle fine-tuné");*/
+
+
+
+    clientResults.push({ weights: weightsToUse, dataSize: client.dataSize });
     clientMetricsForRound.push({
       clientId: client.id,
       clientName: client.name,
@@ -172,12 +224,12 @@ export const runFederatedRound = async (
   let distanceMatrixForRound: number[][] | undefined;
 
   try {
-    const clientResultsWithIds = trainedClients.map(({ result, client }) => ({ 
-      id: client.id, 
-      weights: result.weights, 
-      dataSize: client.dataSize 
+    const clientResultsWithIds = trainedClients.map(({ result, client }) => ({
+      id: client.id,
+      weights: result.weights,
+      dataSize: client.dataSize
     }));
-    
+
     const clustering = clusterClientModels(clientResultsWithIds);
     distanceMatrixForRound = clustering.distanceMatrix;
     clustersForRound = clustering.clusters;
@@ -190,7 +242,7 @@ export const runFederatedRound = async (
     // Build cluster-averaged models
     if (clustersForRound && clustersForRound.length > 0) {
       const clientMap = new Map(clientResultsWithIds.map(c => [c.id, c]));
-      
+
       for (let clusterIdx = 0; clusterIdx < clustersForRound.length; clusterIdx++) {
         const grp = clustersForRound[clusterIdx];
         const entries = grp.map(id => clientMap.get(id)).filter(Boolean) as typeof clientResultsWithIds;

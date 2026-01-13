@@ -19,7 +19,7 @@ const menuItems = [
     icon: Network,
   },
   {
-    title: 'Benchmark',
+    title: 'Benchmarking',
     url: '/benchmark',
     icon: FlaskConical,
   },

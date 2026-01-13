@@ -69,10 +69,10 @@ function addMLPWeights(a: MLPWeights, b: MLPWeights): MLPWeights {
 import type { MLPWeights } from '../../models/mlp';
 import { cloneWeights } from '../../models/mlp';
 import {
-  unflattenWeights,
-  MNIST_INPUT_SIZE,
-  MNIST_HIDDEN_SIZE,
-  MNIST_OUTPUT_SIZE
+    unflattenWeights,
+    MNIST_INPUT_SIZE,
+    MNIST_HIDDEN_SIZE,
+    MNIST_OUTPUT_SIZE
 } from '../../models/mlp';
 
 
@@ -125,7 +125,7 @@ export const applyGravityAggregation = (
     // Constantes physiques
     const G = 9.8;
     const m_centroid = 10e3;
-    const m_client = 10;
+    const m_client = 1;
     // Calcul de la distance L2 entre les deux modèles (N)
     const distance = l2DistanceMLP(receivedModel, previousLocalModel);
     let w = 1;
@@ -149,14 +149,36 @@ export const applyGravityAggregation = (
             const localN1 = unflattenWeights(localModelHistory[1], MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
             const receivedN1 = unflattenWeights(receivedModelHistory[1], MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
             // Somme des deux modèles
+            
             const sumWeights = addMLPWeights(substractMLPWeights(localN1, receivedN1), substractMLPWeights(localN1, receivedModel));
             const sumWeightsNorm = normMLPWeights(sumWeights);
             const vb = substractMLPWeights(localN1, receivedModel);
             const sumVbNorm = normMLPWeights(vb);
             w = sumVbNorm / (sumVbNorm + sumWeightsNorm);
+
+            const distance = substractMLPWeights(localN1, receivedN1);
+            const distance2 = substractMLPWeights(localN1, receivedModel);
+            if(distance > distance2)
+                w = 1
+            else w = 0;
+            w = distance / distance2;
+            if(w > 1) w = Math.max(0.5, Math.min(1, w));
+            /*const sumWeights = addMLPWeights(substractMLPWeights(localN1, receivedN1), substractMLPWeights(localN1, receivedModel));
+            const vdistance = substractMLPWeights(localN1, receivedModel);
+            const vattraction = substractMLPWeights(localN1, receivedN1);
+            const w1 = normMLPWeights(vdistance) / (normMLPWeights(vattraction) + normMLPWeights(vdistance));
+
+            // Force gravitationnelle réelle (G=9.8, m1=100, m2=1)
+            const F = G * m_centroid * m_client / (distance * distance + epsilon);
+            // Force max pour distance nulle
+            const Fmax = G * m_centroid * m_client;
+            let w2 = F / Fmax;
+            w2 = Math.max(0, Math.min(1, w2));
+            w = Math.max(0, w1 - w2);
+            w = 0;*/
+
             console.log('Somme des modèles receivedN1 + receivedModel:', sumWeights);
-            console.log('Norme (longueur) du vecteur sumWeights:', sumWeightsNorm);
-            console.log(`Gravity aggregation: distance_N=${distance}, v_N-1=${vb}, w_final=${w}`);
+            console.log(`Gravity aggregation: distance_N=${distance}, w_1 (distance)=${w}, w_2 (attraction)=${w}, w=${w}`);
         } else {
             console.log(`Gravity aggregation: distance_N=${distance}, pas d'historique N-1, w=${w}`);
         }

@@ -109,6 +109,7 @@ export const simulateClientTraining = async (
 
   // Training configuration for MNIST
   const localEpochs = 3;
+  // Utilise un learning
   const learningRate = 0.01;
 
   let loss = 0;

@@ -2,7 +2,7 @@ import type { ModelWeights, ClientState } from '../types';
 import { getModelFor1NN } from './oneNN';
 import { computeProbabilisticAssignments } from './probabilistic';
 
-export type AssignmentMethod = '1NN' | 'Probabiliste';
+export type AssignmentMethod = '1NN' | 'Probabiliste' | 'Gravity';
 
 export interface AssignmentContext {
     globalModel: ModelWeights;
