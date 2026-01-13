@@ -97,7 +97,7 @@ const IndexContent = () => {
           </div>
 
           {/* Center - Visualization & Metrics */}
-          <div className="lg:col-span-6 space-y-6">
+          <div className="lg:col-span-9 space-y-6">
             {/* Client Aggregation Panels */}
             {isNone && (
               <NonePanel
@@ -168,10 +168,6 @@ const IndexContent = () => {
             <MetricsChart history={state.roundHistory} />
           </div>
 
-          {/* Right Sidebar - History */}
-          <div className="lg:col-span-3">
-            <RoundHistory history={state.roundHistory} />
-          </div>
         </div>
       </main>
 
