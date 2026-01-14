@@ -74,6 +74,7 @@ export interface ClientRoundMetrics {
   loss: number;
   accuracy: number;
   testAccuracy: number;
+  gradientNorm?: number;
 }
 
 export interface RoundMetrics {
