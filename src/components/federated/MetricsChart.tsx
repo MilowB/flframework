@@ -78,6 +78,9 @@ export const MetricsChart = ({ history }: MetricsChartProps) => {
           dataPoint[`${cm.clientId}_loss`] = cm.loss;
           dataPoint[`${cm.clientId}_acc`] = cm.accuracy * 100;
           dataPoint[`${cm.clientId}_test`] = cm.testAccuracy * 100;
+          if (cm.gradientNorm !== undefined) {
+            dataPoint[`${cm.clientId}_grad`] = cm.gradientNorm;
+          }
         });
       }
       return dataPoint;
@@ -399,6 +402,66 @@ export const MetricsChart = ({ history }: MetricsChartProps) => {
                             stroke={COLORS[idx % COLORS.length]}
                             strokeWidth={2}
                             strokeDasharray="5 5"
+                            dot={{ fill: COLORS[idx % COLORS.length], strokeWidth: 0, r: 2 }}
+                            activeDot={{ r: 4, fill: COLORS[idx % COLORS.length] }}
+                            connectNulls
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Gradient Norm Chart */}
+                  <div className="mt-6 p-3 rounded-lg bg-muted/30 border border-border">
+                    <span className="text-sm text-muted-foreground">
+                      Norme des gradients (changement de poids après entraînement local)
+                    </span>
+                  </div>
+                  
+                  <div className="h-[250px] mt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={clientChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 18%)" />
+                        <XAxis 
+                          dataKey="round" 
+                          stroke="hsl(215, 20%, 55%)"
+                          fontSize={12}
+                          tickLine={false}
+                        />
+                        <YAxis 
+                          stroke="hsl(215, 20%, 55%)"
+                          fontSize={12}
+                          tickLine={false}
+                          domain={[0, 'auto']}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(222, 47%, 10%)',
+                            border: '1px solid hsl(222, 30%, 18%)',
+                            borderRadius: '8px',
+                            color: 'hsl(210, 40%, 98%)',
+                          }}
+                          labelFormatter={(label) => `Round ${label}`}
+                          formatter={(value: number, name: string) => {
+                            const clientId = name.replace('_grad', '');
+                            const clientName = availableClients.find(([id]) => id === clientId)?.[1] || clientId;
+                            return [value.toFixed(4), clientName];
+                          }}
+                        />
+                        <Legend 
+                          wrapperStyle={{ paddingTop: '10px', fontSize: '11px' }}
+                          formatter={(value) => {
+                            const clientId = value.replace('_grad', '');
+                            return availableClients.find(([id]) => id === clientId)?.[1] || clientId;
+                          }}
+                        />
+                        {availableClients.map(([clientId], idx) => (
+                          <Line
+                            key={clientId}
+                            type="monotone"
+                            dataKey={`${clientId}_grad`}
+                            stroke={COLORS[idx % COLORS.length]}
+                            strokeWidth={2}
                             dot={{ fill: COLORS[idx % COLORS.length], strokeWidth: 0, r: 2 }}
                             activeDot={{ r: 4, fill: COLORS[idx % COLORS.length] }}
                             connectNulls

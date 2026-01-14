@@ -210,6 +210,7 @@ export const runFederatedRound = async (
       loss: result.loss,
       accuracy: result.accuracy,
       testAccuracy: result.testAccuracy,
+      gradientNorm: result.gradientNorm,
     });
     onClientUpdate(client.id, {
       status: 'completed',
