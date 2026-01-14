@@ -102,6 +102,16 @@ function l2DistanceMLP(a: MLPWeights, b: MLPWeights): number {
     return Math.sqrt(sum);
 }
 
+/**
+ * Stratégie d'agrégation Gravity pour client FL.
+ * @param receivedModel Modèle reçu du serveur/cluster
+ * @param previousLocalModel Dernier modèle local du client
+ * @param localModelHistory Historique des modèles locaux aplatis (optionnel)
+ * @param receivedModelHistory Historique des modèles reçus aplatis (optionnel)
+ * @param k Facteur d'ajustement de la contre-force
+ * @param currentRound Numéro du round courant (optionnel)
+ * @param clientId Identifiant du client (optionnel)
+ */
 export const applyGravityAggregation = (
     receivedModel: MLPWeights,
     previousLocalModel: MLPWeights | null,
@@ -115,7 +125,9 @@ export const applyGravityAggregation = (
         bias: number[];
         version: number;
     }>,
-    k: number = 0.1 // facteur d'ajustement de la contre-force
+    k: number = 0.1, // facteur d'ajustement de la contre-force
+    currentRound?: number, // numéro de round courant (optionnel)
+    clientId?: string // identifiant du client (optionnel)
 ): MLPWeights => {
     // Si pas de modèle local précédent, on retourne le modèle reçu
     if (!previousLocalModel) {
@@ -128,6 +140,7 @@ export const applyGravityAggregation = (
     const m_client = 1;
     // Calcul de la distance L2 entre les deux modèles (N)
     const distance = l2DistanceMLP(receivedModel, previousLocalModel);
+    // const sumWeightsNorm = normMLPWeights(sumWeights);
     let w = 1;
     if (distance > 0) {
         const epsilon = 1e-8;
@@ -138,54 +151,19 @@ export const applyGravityAggregation = (
         // Pondération normalisée entre 0 et 1
         //w = F / Fmax;
         //w = Math.max(0, Math.min(1, w));
-        w = 1
-
-        // --- Modulation par la "vitesse" d'éloignement (distance N-1) ---
-        console.log(localModelHistory);
-        console.log(receivedModelHistory);
-        if (localModelHistory && receivedModelHistory &&
-            localModelHistory.length > 1 && receivedModelHistory.length > 1 &&
-            localModelHistory[1] && receivedModelHistory[1]) {
-            const localN1 = unflattenWeights(localModelHistory[1], MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
-            const receivedN1 = unflattenWeights(receivedModelHistory[1], MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE);
-            // Somme des deux modèles
-            
-            const sumWeights = addMLPWeights(substractMLPWeights(localN1, receivedN1), substractMLPWeights(localN1, receivedModel));
-            const sumWeightsNorm = normMLPWeights(sumWeights);
-            const vb = substractMLPWeights(localN1, receivedModel);
-            const sumVbNorm = normMLPWeights(vb);
-            w = sumVbNorm / (sumVbNorm + sumWeightsNorm);
-
-            const distanceVec = substractMLPWeights(localN1, receivedN1);
-            const distance2Vec = substractMLPWeights(localN1, receivedModel);
-            const distanceNorm = normMLPWeights(distanceVec);
-            const distance2Norm = normMLPWeights(distance2Vec);
-            if(distanceNorm > distance2Norm)
-                w = 1
-            else w = 0;
-            w = distance2Norm > 0 ? distanceNorm / distance2Norm : 0;
-            if(w > 1) w = Math.max(0.5, Math.min(1, w));
-            /*const sumWeights = addMLPWeights(substractMLPWeights(localN1, receivedN1), substractMLPWeights(localN1, receivedModel));
-            const vdistance = substractMLPWeights(localN1, receivedModel);
-            const vattraction = substractMLPWeights(localN1, receivedN1);
-            const w1 = normMLPWeights(vdistance) / (normMLPWeights(vattraction) + normMLPWeights(vdistance));
-
-            // Force gravitationnelle réelle (G=9.8, m1=100, m2=1)
-            const F = G * m_centroid * m_client / (distance * distance + epsilon);
-            // Force max pour distance nulle
-            const Fmax = G * m_centroid * m_client;
-            let w2 = F / Fmax;
-            w2 = Math.max(0, Math.min(1, w2));
-            w = Math.max(0, w1 - w2);
-            w = 0;*/
-
-            console.log('Somme des modèles receivedN1 + receivedModel:', sumWeights);
-            console.log(`Gravity aggregation: distance_N=${distance}, w_1 (distance)=${w}, w_2 (attraction)=${w}, w=${w}`);
-        } else {
-            console.log(`Gravity aggregation: distance_N=${distance}, pas d'historique N-1, w=${w}`);
-        }
     }
 
+    if (clientId === "client-0") {
+        if (currentRound < 3 || currentRound >= 10) {
+            w = 1;
+        }
+        else {
+            w = 0;
+        }
+    }
+    else{
+        w = 1;
+    }
 
     // Création d'une copie pour ne pas muter l'original
     const result = cloneWeights(receivedModel);

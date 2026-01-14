@@ -50,7 +50,8 @@ export const simulateClientTraining = async (
   client: ClientState,
   globalModel: ModelWeights,
   onProgress: (progress: number) => void,
-  onStatusUpdate?: (status: 'training' | 'evaluating') => void
+  onStatusUpdate?: (status: 'training' | 'evaluating') => void,
+  currentRound?: number
 ): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number }> => {
   // Ensure MNIST is loaded
   let trainData = mnistTrainData;
@@ -90,7 +91,7 @@ export const simulateClientTraining = async (
 
   console.log(`Traitement du client ${client.id}`);
   const aggregationMethod = client.clientAggregationMethod || 'none';
-  const startingModel = applyClientAggregation(aggregationMethod, receivedMLP, previousLocalMLP, client.localModelHistory, client.receivedModelHistory);
+  const startingModel = applyClientAggregation(aggregationMethod, receivedMLP, previousLocalMLP, client.localModelHistory, client.receivedModelHistory, currentRound, client.id);
 
   // Clone weights for local training
   const localMLP = cloneWeights(startingModel);
@@ -109,8 +110,8 @@ export const simulateClientTraining = async (
 
   // Training configuration for MNIST
   const localEpochs = 3;
-  // Utilise un learning
-  const learningRate = 0.01;
+  // Utilise le learning rate du client s'il est défini, sinon 0.01 par défaut
+  const learningRate = client.learningRate !== undefined ? client.learningRate : 0.01;
 
   let loss = 0;
   let accuracy = 0;

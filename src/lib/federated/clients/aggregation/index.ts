@@ -24,10 +24,12 @@ export const applyClientAggregation = (
     bias: number[];
     version: number;
   }>,
+  currentRound?: number,
+  clientId?: string
 ): MLPWeights => {
   switch (method) {
     case 'gravity':
-      return applyGravityAggregation(receivedModel, previousLocalModel, localModelHistory, receivedModelHistory);
+      return applyGravityAggregation(receivedModel, previousLocalModel, localModelHistory, receivedModelHistory, 0.1, currentRound, clientId);
     case '50-50':
       return applyFiftyFiftyAggregation(receivedModel, previousLocalModel);
     case 'none':

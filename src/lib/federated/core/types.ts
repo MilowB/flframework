@@ -40,6 +40,7 @@ export interface ClientState {
   roundsParticipated: number;
   lastLocalModel?: ModelWeights;
   clientAggregationMethod?: 'none' | '50-50' | 'gravity';
+  learningRate?: number;
 }
 
 export interface ServerConfig {

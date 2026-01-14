@@ -23,6 +23,10 @@ import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from 
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
 import { applyAssignment } from './assignment';
 
+import {
+  pca3D_single
+} from './models/mlp';
+
 // Preload MNIST data
 export const preloadMNIST = async (): Promise<void> => {
   const promises: Promise<void>[] = [];
@@ -60,7 +64,7 @@ export const initializeModel = (architecture: string): ModelWeights => {
  * @returns [RoundMetrics, clustersForRound]
  */
 export const runFederatedRound = async (
-    // Dictionnaire pour stocker le modèle envoyé à chaque client
+  // Dictionnaire pour stocker le modèle envoyé à chaque client
   state: FederatedState,
   onStateUpdate: (state: Partial<FederatedState>) => void,
   onClientUpdate: (clientId: string, update: Partial<ClientState>) => void,
@@ -134,11 +138,25 @@ export const runFederatedRound = async (
     // Stocker dans le dictionnaire pour ce client
     modelsSentToClients[client.id] = modelToSend;
 
+    // Affichage PCA 3D du modèle envoyé au client
+    try {
+      if (client.id === "client-0") {
+        const { vectorizeModel, pca3D_single } = await import('./models/mlp');
+        const modelToShow = modelsSentToClients[client.id];
+        const vec = vectorizeModel(unflattenWeights(modelToShow, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE));
+        const pca3d = pca3D_single(vec);
+        console.log(`PCA3D du modèle envoyé au client ${client.id}:`, pca3d);
+      }
+    } catch (e) {
+      console.warn('Erreur PCA3D:', e);
+    }
+
     const result = await simulateClientTraining(
       client,
       modelToSend,
       (progress) => onClientUpdate(client.id, { progress }),
-      (status) => onClientUpdate(client.id, { status })
+      (status) => onClientUpdate(client.id, { status }),
+      currentRound
     );
     onClientUpdate(client.id, {
       status: 'sending',
@@ -180,17 +198,15 @@ export const runFederatedRound = async (
     const { result, client } = trainedClients[i];
     let weightsToUse = result.weights;
 
-    // HARDCODE DE STRATEGIE GRAVITY
-    /*
+    // @debug HARDCODE DE STRATEGIE GRAVITY
     await new Promise(resolve => setTimeout(resolve, 200));
     // Gravity: dès le round 5, utiliser le modèle de cluster envoyé par le serveur (sans fine-tuning)
-    if (serverConfig.clientAggregationMethod === 'gravity' && currentRound >= 5 && client.id==="client-0") {
+    if (currentRound >= 3 && client.id === "client-0" && currentRound < 10) {
       console.log("je suis le client " + client.id);
+      // Affecter le learning rate à 0.5 pour ce client
+      client.learningRate = 0.05;
       // On récupère le modèle envoyé au client depuis le dictionnaire
       if (modelsSentToClients[client.id]) {
-        weightsToUse = modelsSentToClients[client.id];
-        console.log("Le client retourne le modèle reçu sans fine-tuning");
-      } else if (modelsSentToClients[client.id]) {
         weightsToUse = modelsSentToClients[client.id];
         console.log("Le client retourne le modèle reçu sans fine-tuning");
       } else {
@@ -199,9 +215,12 @@ export const runFederatedRound = async (
         weightsToUse = result.weights;
       }
     }
-    else console.log("Le client retourne le modèle fine-tuné");*/
+    else {
+      console.log("Le client retourne le modèle fine-tuné");
+      weightsToUse = result.weights;
+    }
 
-
+    trainedClients[i].result.weights = weightsToUse;
 
     clientResults.push({ weights: weightsToUse, dataSize: client.dataSize });
     clientMetricsForRound.push({
