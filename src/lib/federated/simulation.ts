@@ -235,6 +235,7 @@ export const runFederatedRound = async (
       accuracy: result.accuracy,
       testAccuracy: result.testAccuracy,
       gradientNorm: result.gradientNorm,
+      weights: weightsToUse, // Store weights for visualization
     });
     onClientUpdate(client.id, {
       status: 'completed',
@@ -300,10 +301,18 @@ export const runFederatedRound = async (
           version: entries[0].weights.version,
         };
 
+        // Store the cluster model with cluster-X key
+        clusterModelStore.set(`cluster-${clusterIdx}`, averagedModel);
+        // Also store for each client in the cluster
         for (const e of entries) clusterModelStore.set(e.id, averagedModel);
 
         const clusterAccuracy = evaluateClusterModel(grp, averagedModel, clientTestDataStore);
-        clusterMetricsForRound.push({ clusterId: clusterIdx, accuracy: clusterAccuracy, clientIds: grp });
+        clusterMetricsForRound.push({ 
+          clusterId: clusterIdx, 
+          accuracy: clusterAccuracy, 
+          clientIds: grp,
+          weights: averagedModel // Store weights for visualization
+        });
       }
     }
   } catch (err) {
@@ -338,6 +347,11 @@ export const runFederatedRound = async (
     silhouetteAvg: silhouetteAvgForRound,
     clusterMetrics: clusterMetricsForRound.length > 0 ? clusterMetricsForRound : undefined,
     clientMetrics: clientMetricsForRound.length > 0 ? clientMetricsForRound : undefined,
+    globalModelWeights: {
+      layers: newGlobalModel.layers,
+      bias: newGlobalModel.bias,
+      version: newGlobalModel.version,
+    },
   };
 
   onStateUpdate({

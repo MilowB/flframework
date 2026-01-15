@@ -1,11 +1,58 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Sphere } from '@react-three/drei';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { RoundMetrics } from '@/lib/federated/types';
-import { Model3DPosition, RoundSnapshot3D, computeModelPositions, flattenModelWeights } from '@/lib/federated/visualization/pca';
+import { Model3DPosition, RoundSnapshot3D, flattenModelWeights } from '@/lib/federated/visualization/pca';
 import * as THREE from 'three';
+
+// Import computePCAProjection and CLUSTER_COLORS from pca module
+function computePCAProjection(vectors: number[][], numComponents: number = 3): number[][] {
+  if (vectors.length === 0) return [];
+  
+  const dim = vectors[0].length;
+  const n = vectors.length;
+  
+  const projectionVectors: number[][] = [];
+  
+  for (let comp = 0; comp < numComponents; comp++) {
+    let v = new Array(dim).fill(0).map(() => Math.random() - 0.5);
+    let norm = Math.sqrt(v.reduce((sum, x) => sum + x * x, 0));
+    v = v.map(x => x / (norm || 1));
+    
+    for (let iter = 0; iter < 10; iter++) {
+      const scores = vectors.map(row => row.reduce((sum, x, i) => sum + x * v[i], 0));
+      const newV = new Array(dim).fill(0);
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < dim; j++) {
+          newV[j] += vectors[i][j] * scores[i];
+        }
+      }
+      
+      for (const prev of projectionVectors) {
+        const dot = newV.reduce((sum, x, i) => sum + x * prev[i], 0);
+        for (let i = 0; i < dim; i++) {
+          newV[i] -= dot * prev[i];
+        }
+      }
+      
+      norm = Math.sqrt(newV.reduce((sum, x) => sum + x * x, 0));
+      v = newV.map(x => x / (norm || 1));
+    }
+    
+    projectionVectors.push(v);
+  }
+  
+  return projectionVectors;
+}
+
+const CLUSTER_COLORS = [
+  '#8b5cf6', '#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6',
+  '#ec4899', '#eab308', '#a855f7', '#14b8a6', '#84cc16', '#fb923c',
+];
+
+const GLOBAL_COLOR = '#ffffff';
 
 interface ModelVisualization3DProps {
   history: RoundMetrics[];
@@ -14,14 +61,15 @@ interface ModelVisualization3DProps {
   globalModel?: { layers: number[][]; bias: number[]; version: number } | null;
 }
 
-// Individual model sphere component
+// Individual model sphere/box component
 function ModelSphere({ 
   position, 
   color, 
   name, 
   type, 
   isHovered, 
-  onHover 
+  onHover,
+  shape = 'sphere'
 }: { 
   position: [number, number, number];
   color: string;
@@ -29,27 +77,62 @@ function ModelSphere({
   type: 'client' | 'cluster' | 'global';
   isHovered: boolean;
   onHover: (hovered: boolean) => void;
+  shape?: 'sphere' | 'box';
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
+  const targetPosition = useRef(new THREE.Vector3(...position));
+  const isInitialized = useRef(false);
   
-  // Animate scale on hover
+  // Initialize position on first render
+  useEffect(() => {
+    if (!isInitialized.current && groupRef.current) {
+      groupRef.current.position.set(...position);
+      isInitialized.current = true;
+    }
+  }, []);
+  
+  // Update target position when prop changes
+  useEffect(() => {
+    targetPosition.current.set(...position);
+  }, [position]);
+  
+  // Animate position and scale
   useFrame(() => {
+    if (groupRef.current && shape !== 'box') {
+      // Smooth position transition only for spheres (clients), not boxes (clusters)
+      groupRef.current.position.lerp(targetPosition.current, 0.1);
+    }
+    
     if (meshRef.current) {
+      // Animate scale on hover
       const targetScale = isHovered ? 1.3 : 1;
       meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
     }
   });
   
+  // Update group position immediately for boxes (clusters)
+  useEffect(() => {
+    if (shape === 'box' && groupRef.current) {
+      groupRef.current.position.set(...position);
+    }
+  }, [position, shape]);
+  
   const radius = type === 'global' ? 0.4 : type === 'cluster' ? 0.3 : 0.2;
+  const boxSize = type === 'global' ? 0.7 : type === 'cluster' ? 0.5 : 0.35;
   
   return (
-    <group position={position}>
+    <group ref={groupRef}>
       <mesh
         ref={meshRef}
         onPointerOver={() => onHover(true)}
         onPointerOut={() => onHover(false)}
       >
-        <sphereGeometry args={[radius, 32, 32]} />
+        {shape === 'box' ? (
+          <boxGeometry args={[boxSize, boxSize, boxSize]} />
+        ) : (
+          <sphereGeometry args={[radius, 32, 32]} />
+        )}
         <meshStandardMaterial 
           color={color} 
           emissive={color}
@@ -58,10 +141,11 @@ function ModelSphere({
           metalness={0.7}
         />
       </mesh>
-      {isHovered && (
+      {/* Always show label for clients, hover for others */}
+      {(type === 'client' || isHovered) && (
         <Text
-          position={[0, radius + 0.3, 0]}
-          fontSize={0.25}
+          position={[0, (shape === 'box' ? boxSize/2 : radius) + 0.3, 0]}
+          fontSize={type === 'client' ? 0.2 : 0.25}
           color="white"
           anchorX="center"
           anchorY="bottom"
@@ -121,7 +205,7 @@ function Scene({ positions }: { positions: Model3DPosition[] }) {
         <lineBasicMaterial color="#4444ff" opacity={0.5} transparent />
       </line>
       
-      {/* Model spheres */}
+      {/* Model spheres and boxes */}
       {positions.map((model) => (
         <ModelSphere
           key={model.id}
@@ -131,6 +215,7 @@ function Scene({ positions }: { positions: Model3DPosition[] }) {
           type={model.type}
           isHovered={hoveredId === model.id}
           onHover={(hovered) => setHoveredId(hovered ? model.id : null)}
+          shape={model.type === 'cluster' ? 'box' : 'sphere'}
         />
       ))}
       
@@ -153,67 +238,165 @@ export function ModelVisualization3D({
 }: ModelVisualization3DProps) {
   const [currentRound, setCurrentRound] = useState(0);
   
-  // Compute positions for current round
-  const positions = useMemo(() => {
+  // Compute PCA once for all rounds to have a consistent reference frame
+  const allRoundsPositions = useMemo(() => {
     if (!history.length) return [];
     
+    console.log('=== Computing PCA for all rounds ===');
+    
+    // Build a stable cluster color mapping across all rounds
+    // based on cluster composition (sorted client IDs)
+    const clusterSignatureToColorIndex = new Map<string, number>();
+    let nextColorIndex = 0;
+    
+    const getClusterColorIndex = (clientIds: string[]): number => {
+      const signature = [...clientIds].sort().join(',');
+      if (!clusterSignatureToColorIndex.has(signature)) {
+        clusterSignatureToColorIndex.set(signature, nextColorIndex);
+        nextColorIndex = (nextColorIndex + 1) % CLUSTER_COLORS.length;
+      }
+      return clusterSignatureToColorIndex.get(signature)!;
+    };
+    
+    // Collect all models from all rounds
+    const allClientVectors: number[][] = [];
+    const allClientMeta: { roundIndex: number; id: string; name: string; colorIndex?: number }[] = [];
+    const allClusterVectors: number[][] = [];
+    const allClusterMeta: { roundIndex: number; id: string; name: string; colorIndex: number }[] = [];
+    const allGlobalVectors: number[][] = [];
+    const allGlobalMeta: { roundIndex: number; id: string; name: string }[] = [];
+    
+    history.forEach((roundData, roundIndex) => {
+      // Build cluster color mapping for this round
+      const clientToColorIndex = new Map<string, number>();
+      if (roundData.clusterMetrics) {
+        roundData.clusterMetrics.forEach((cm) => {
+          const colorIndex = getClusterColorIndex(cm.clientIds);
+          cm.clientIds.forEach(clientId => {
+            clientToColorIndex.set(clientId, colorIndex);
+          });
+        });
+      }
+      
+      // Collect client models for this round
+      if (roundData.clientMetrics) {
+        roundData.clientMetrics.forEach((cm) => {
+          if (cm.weights) {
+            const colorIndex = clientToColorIndex.get(cm.clientId);
+            
+            allClientVectors.push(flattenModelWeights(cm.weights));
+            allClientMeta.push({
+              roundIndex,
+              id: cm.clientId,
+              name: cm.clientName,
+              colorIndex
+            });
+          }
+        });
+      }
+      
+      // Collect cluster models for this round
+      if (roundData.clusterMetrics) {
+        roundData.clusterMetrics.forEach((cm) => {
+          if (cm.weights) {
+            const colorIndex = getClusterColorIndex(cm.clientIds);
+            allClusterVectors.push(flattenModelWeights(cm.weights));
+            allClusterMeta.push({
+              roundIndex,
+              id: `cluster-${cm.clusterId}`,
+              name: `Cluster ${cm.clusterId}`,
+              colorIndex
+            });
+          }
+        });
+      }
+      
+      // Collect global model for this round
+      if (roundData.globalModelWeights) {
+        allGlobalVectors.push(flattenModelWeights(roundData.globalModelWeights));
+        allGlobalMeta.push({
+          roundIndex,
+          id: 'global',
+          name: 'Global'
+        });
+      }
+    });
+    
+    if (allClientVectors.length === 0) {
+      console.log('No models with weights found');
+      return [];
+    }
+    
+    console.log(`Computing PCA with ${allClientVectors.length} clients + ${allClusterVectors.length} clusters + ${allGlobalVectors.length} global models`);
+    console.log(`Found ${clusterSignatureToColorIndex.size} unique cluster compositions`);
+    
+    // Compute PCA on all models together
+    const allVectors = [...allClientVectors, ...allClusterVectors, ...allGlobalVectors];
+    const allMeta = [...allClientMeta, ...allClusterMeta, ...allGlobalMeta];
+    
+    const dim = allVectors[0].length;
+    const mean = new Array(dim).fill(0);
+    for (const vec of allVectors) {
+      for (let i = 0; i < dim; i++) {
+        mean[i] += vec[i] / allVectors.length;
+      }
+    }
+    
+    // Compute PCA projection
+    const projVectors = computePCAProjection(allVectors.map(vec => vec.map((v, i) => v - mean[i])), 3);
+    
+    if (projVectors.length < 3) {
+      console.log('PCA failed, not enough components');
+      return [];
+    }
+    
+    // Project all vectors
+    const positions = allVectors.map((vec, i) => {
+      const centered = vec.map((v, j) => v - mean[j]);
+      const coords: [number, number, number] = [0, 0, 0];
+      for (let d = 0; d < 3; d++) {
+        coords[d] = centered.reduce((sum, v, j) => sum + v * projVectors[d][j], 0);
+      }
+      
+      const isGlobal = i >= allClientMeta.length + allClusterMeta.length;
+      const isCluster = !isGlobal && i >= allClientMeta.length;
+      const meta = allMeta[i];
+      
+      return {
+        roundIndex: meta.roundIndex,
+        id: meta.id,
+        name: isGlobal ? meta.name : isCluster ? meta.name : meta.id.replace('client-', ''),
+        type: (isGlobal ? 'global' : isCluster ? 'cluster' : 'client') as 'client' | 'cluster' | 'global',
+        position: coords,
+        clusterIdx: meta.colorIndex,
+        color: isGlobal 
+          ? GLOBAL_COLOR 
+          : meta.colorIndex !== undefined 
+            ? CLUSTER_COLORS[meta.colorIndex % CLUSTER_COLORS.length] 
+            : CLUSTER_COLORS[0]
+      };
+    });
+    
+    // Normalize all positions to same scale
+    const allCoords = positions.flatMap(p => p.position);
+    const maxAbs = Math.max(...allCoords.map(Math.abs), 1);
+    const scale = 5 / maxAbs;
+    
+    return positions.map(p => ({
+      ...p,
+      position: p.position.map(c => c * scale) as [number, number, number]
+    }));
+  }, [history]);
+  
+  // Filter positions for current round
+  const positions = useMemo(() => {
+    if (!allRoundsPositions.length) return [];
+    
     const roundIndex = Math.min(currentRound, history.length - 1);
-    const roundData = history[roundIndex];
+    const filtered = allRoundsPositions.filter(p => p.roundIndex === roundIndex);
     
-    // Get client metrics from the round
-    const clientList: { id: string; name: string; weights: { layers: number[][]; bias: number[]; version: number } }[] = [];
-    
-    // Use clientModels if available, otherwise create placeholder
-    if (clientModels) {
-      clientModels.forEach((model, id) => {
-        clientList.push({
-          id,
-          name: model.name,
-          weights: { ...model.weights, version: 0 }
-        });
-      });
-    } else if (roundData.clientMetrics) {
-      // Create placeholder positions based on client metrics
-      roundData.clientMetrics.forEach((cm, idx) => {
-        clientList.push({
-          id: cm.clientId,
-          name: cm.clientName,
-          weights: {
-            layers: [[idx * 0.1, idx * 0.2]],
-            bias: [idx * 0.05],
-            version: 0
-          }
-        });
-      });
-    }
-    
-    // Get cluster models
-    const clusterList: { id: string; weights: { layers: number[][]; bias: number[]; version: number } }[] = [];
-    if (clusterModels) {
-      clusterModels.forEach((model, id) => {
-        clusterList.push({
-          id,
-          weights: { ...model, version: 0 }
-        });
-      });
-    } else if (roundData.clusterMetrics) {
-      roundData.clusterMetrics.forEach((cm, idx) => {
-        clusterList.push({
-          id: `cluster-${cm.clusterId}`,
-          weights: {
-            layers: [[idx * 0.3, idx * 0.4]],
-            bias: [idx * 0.1],
-            version: 0
-          }
-        });
-      });
-    }
-    
-    // Use globalModel if available
-    const global = globalModel || null;
-    
-    return computeModelPositions(clientList, clusterList, global, 'aggregated');
-  }, [history, currentRound, clientModels, clusterModels, globalModel]);
+    return filtered;
+  }, [allRoundsPositions, currentRound, history]);
   
   const maxRound = Math.max(0, history.length - 1);
   
@@ -242,12 +425,12 @@ export function ModelVisualization3D({
           <span className="text-muted-foreground">Modèle Global</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-violet-500" />
-          <span className="text-muted-foreground">Modèles Clusters</span>
+          <div className="w-3 h-3 bg-violet-500" />
+          <span className="text-muted-foreground">Modèles Clusters (cubes)</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-purple-500" />
-          <span className="text-muted-foreground">Modèles Clients</span>
+          <span className="text-muted-foreground">Modèles Clients (couleurs par cluster)</span>
         </div>
       </div>
       

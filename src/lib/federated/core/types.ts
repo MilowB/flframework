@@ -71,6 +71,7 @@ export interface ClusterMetrics {
   clusterId: number;
   accuracy: number;
   clientIds: string[];
+  weights?: ModelWeights; // Store cluster model weights for visualization
 }
 
 export interface ClientRoundMetrics {
@@ -80,6 +81,7 @@ export interface ClientRoundMetrics {
   accuracy: number;
   testAccuracy: number;
   gradientNorm?: number;
+  weights?: ModelWeights; // Store client model weights for visualization
 }
 
 export interface RoundMetrics {
@@ -95,6 +97,7 @@ export interface RoundMetrics {
   silhouetteAvg?: number;
   clusterMetrics?: ClusterMetrics[];
   clientMetrics?: ClientRoundMetrics[];
+  globalModelWeights?: ModelWeights; // Store global model weights for visualization
 }
 
 export type ServerStatus = 'idle' | 'sending' | 'waiting' | 'receiving' | 'evaluating' | 'completed';

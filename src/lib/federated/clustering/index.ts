@@ -92,33 +92,13 @@ export const clusterClientModels = (
     clusterMembers[c].idxs.push(i);
   }
 
-  // Stocke le modèle moyen de chaque cluster dans clusterModelStore avec une clé unique
-  let clusterIdx = 0;
-  for (const [c, members] of Object.entries(clusterMembers)) {
-    const idxs = members.idxs;
-    if (idxs.length === 0) continue;
-    // Moyenne des modèles du cluster
-    const sumLayers = validModels[idxs[0]].layers.map(l => new Array(l.length).fill(0));
-    const sumBias = new Array(validModels[idxs[0]].bias.length).fill(0);
-    for (const i of idxs) {
-      for (let li = 0; li < validModels[i].layers.length; li++) {
-        for (let k = 0; k < validModels[i].layers[li].length; k++) {
-          sumLayers[li][k] += validModels[i].layers[li][k];
-        }
-      }
-      for (let b = 0; b < validModels[i].bias.length; b++) {
-        sumBias[b] += validModels[i].bias[b];
-      }
-    }
-    const averagedModel: ModelWeights = {
-      layers: sumLayers.map(l => l.map(v => v / idxs.length)),
-      bias: sumBias.map(v => v / idxs.length),
-      version: 0,
-    };
-    clusterModelStore.set(`cluster-${clusterIdx}`, averagedModel);
-    clusterIdx++;
-  }
-
-  const clusters: string[][] = Array.from(clustersMap.values());
+  // Sort community IDs to ensure consistent ordering
+  const sortedCommunities = Array.from(clustersMap.keys()).sort((a, b) => a - b);
+  const clusters: string[][] = [];
+  
+  sortedCommunities.forEach((communityId) => {
+    // Add cluster members in order
+    clusters.push(clustersMap.get(communityId)!);
+  });
   return { distanceMatrix: D, clusters };
 };

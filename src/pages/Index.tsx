@@ -195,7 +195,9 @@ const IndexContent = () => {
                   }
                 ])
               )}
-              clusterModels={clientModels}
+              clusterModels={new Map(
+                Array.from(clientModels.entries()).filter(([key]) => key.startsWith('cluster-'))
+              )}
               globalModel={state.globalModel}
             />
           </div>

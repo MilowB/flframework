@@ -102,8 +102,8 @@ export interface RoundSnapshot3D {
   positions: Model3DPosition[];
 }
 
-// Color palette for visualization
-const CLIENT_COLORS = [
+// Color palette for visualization - one color per cluster
+const CLUSTER_COLORS = [
   '#8b5cf6', // purple
   '#06b6d4', // cyan
   '#22c55e', // green
@@ -112,16 +112,13 @@ const CLIENT_COLORS = [
   '#3b82f6', // blue
   '#ec4899', // pink
   '#eab308', // yellow
-];
-
-const CLUSTER_COLORS = [
   '#a855f7', // violet
   '#14b8a6', // teal
   '#84cc16', // lime
   '#fb923c', // orange-light
 ];
 
-const GLOBAL_COLOR = '#ffffff';
+const GLOBAL_COLOR = '#ffffff'; // white
 
 /**
  * Compute 3D positions for all models at a specific point
@@ -130,27 +127,46 @@ export function computeModelPositions(
   clientModels: { id: string; name: string; weights: ModelWeights }[],
   clusterModels: { id: string; weights: ModelWeights }[],
   globalModel: ModelWeights | null,
-  phase: 'received' | 'aggregated' | 'before_send'
+  phase: 'received' | 'aggregated' | 'before_send',
+  clusters: string[][] = []
 ): Model3DPosition[] {
-  // Collect all model vectors
+  // Build a map from clientId to cluster index
+  const clientToCluster = new Map<string, number>();
+  clusters.forEach((clusterClients, clusterIdx) => {
+    clusterClients.forEach(clientId => {
+      clientToCluster.set(clientId, clusterIdx);
+    });
+  });
+
+  // Collect all model vectors (clients, clusters, and global)
   const allVectors: number[][] = [];
-  const allMeta: { id: string; name: string; type: 'client' | 'cluster' | 'global' }[] = [];
+  const allMeta: { id: string; name: string; type: 'client' | 'cluster' | 'global'; clusterIdx?: number }[] = [];
   
   for (let i = 0; i < clientModels.length; i++) {
+    const clientId = clientModels[i].id;
+    const clusterIdx = clientToCluster.get(clientId);
     allVectors.push(flattenModelWeights(clientModels[i].weights));
+    
+    // Extract client number from id (e.g., "client-0" -> "0")
+    const clientNumber = clientId.replace('client-', '');
+    
     allMeta.push({ 
       id: clientModels[i].id, 
-      name: clientModels[i].name, 
-      type: 'client' 
+      name: clientNumber, // Show just the number
+      type: 'client',
+      clusterIdx
     });
   }
   
+  // Add cluster models
   for (let i = 0; i < clusterModels.length; i++) {
+    const clusterIdxFromId = parseInt(clusterModels[i].id.replace('cluster-', ''), 10);
     allVectors.push(flattenModelWeights(clusterModels[i].weights));
     allMeta.push({ 
       id: clusterModels[i].id, 
-      name: `Cluster ${i + 1}`, 
-      type: 'cluster' 
+      name: `Cluster ${clusterIdxFromId}`,
+      type: 'cluster',
+      clusterIdx: clusterIdxFromId
     });
   }
   
@@ -177,18 +193,16 @@ export function computeModelPositions(
       ...meta,
       position: [i * 2, 0, 0] as [number, number, number],
       color: meta.type === 'global' ? GLOBAL_COLOR : 
-             meta.type === 'cluster' ? CLUSTER_COLORS[i % CLUSTER_COLORS.length] :
-             CLIENT_COLORS[i % CLIENT_COLORS.length]
+             (meta.clusterIdx !== undefined ? CLUSTER_COLORS[meta.clusterIdx % CLUSTER_COLORS.length] : CLUSTER_COLORS[0])
     }));
   }
   
-  // Project all vectors
+  // Project all vectors and assign colors
   const positions = allVectors.map((vec, i) => ({
     ...allMeta[i],
     position: projectVector(vec, mean, projVectors),
     color: allMeta[i].type === 'global' ? GLOBAL_COLOR :
-           allMeta[i].type === 'cluster' ? CLUSTER_COLORS[parseInt(allMeta[i].id.replace('cluster-', '')) % CLUSTER_COLORS.length] :
-           CLIENT_COLORS[i % CLIENT_COLORS.length]
+           (allMeta[i].clusterIdx !== undefined ? CLUSTER_COLORS[allMeta[i].clusterIdx! % CLUSTER_COLORS.length] : CLUSTER_COLORS[0])
   }));
   
   // Normalize positions to reasonable range
@@ -196,8 +210,15 @@ export function computeModelPositions(
   const maxAbs = Math.max(...allCoords.map(Math.abs), 1);
   const scale = 5 / maxAbs;
   
-  return positions.map(p => ({
+  const result = positions.map(p => ({
     ...p,
     position: p.position.map(c => c * scale) as [number, number, number]
   }));
+  
+  console.log('=== Final color assignments ===');
+  result.forEach(p => {
+    console.log(`${p.id} (${p.type}): clusterIdx=${p.clusterIdx}, color=${p.color}`);
+  });
+  
+  return result;
 }
