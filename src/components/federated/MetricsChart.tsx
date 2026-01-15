@@ -1,13 +1,17 @@
 import { useMemo } from 'react';
-import { RoundMetrics } from '@/lib/federated/types';
+import { RoundMetrics, ModelWeights } from '@/lib/federated/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { TrendingDown, TrendingUp, Server, Layers, Users } from 'lucide-react';
+import { TrendingDown, TrendingUp, Server, Layers, Users, Box } from 'lucide-react';
 import SimilarityMatrix from './SimilarityMatrix';
+import { ModelVisualization3D } from './ModelVisualization3D';
 
 interface MetricsChartProps {
   history: RoundMetrics[];
+  clientModels?: Map<string, { weights: { layers: number[][]; bias: number[] }; name: string }>;
+  clusterModels?: Map<string, { layers: number[][]; bias: number[] }>;
+  globalModel?: ModelWeights | null;
 }
 
 // Color palette for multiple lines
@@ -22,7 +26,7 @@ const COLORS = [
   'hsl(60, 72%, 50%)',  // Yellow
 ];
 
-export const MetricsChart = ({ history }: MetricsChartProps) => {
+export const MetricsChart = ({ history, clientModels, clusterModels, globalModel }: MetricsChartProps) => {
   // Server chart data (global model)
   const serverChartData = useMemo(() => history.map((h) => ({
     round: h.round + 1,
@@ -105,7 +109,7 @@ export const MetricsChart = ({ history }: MetricsChartProps) => {
           </div>
         ) : (
           <Tabs defaultValue="server" className="w-full">
-            <TabsList className="w-full grid grid-cols-3 bg-muted/30 mb-4">
+            <TabsList className="w-full grid grid-cols-4 bg-muted/30 mb-4">
               <TabsTrigger value="server" className="gap-2">
                 <Server className="w-4 h-4" />
                 Serveur
@@ -117,6 +121,10 @@ export const MetricsChart = ({ history }: MetricsChartProps) => {
               <TabsTrigger value="clients" className="gap-2">
                 <Users className="w-4 h-4" />
                 Clients
+              </TabsTrigger>
+              <TabsTrigger value="3d" className="gap-2">
+                <Box className="w-4 h-4" />
+                3D
               </TabsTrigger>
             </TabsList>
 
@@ -472,6 +480,16 @@ export const MetricsChart = ({ history }: MetricsChartProps) => {
                   </div>
                 </>
               )}
+            </TabsContent>
+
+            {/* 3D Visualization Tab */}
+            <TabsContent value="3d">
+              <ModelVisualization3D 
+                history={history}
+                clientModels={clientModels}
+                clusterModels={clusterModels}
+                globalModel={globalModel}
+              />
             </TabsContent>
           </Tabs>
         )}

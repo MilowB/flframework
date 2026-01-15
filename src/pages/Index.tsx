@@ -184,7 +184,20 @@ const IndexContent = () => {
               </TabsContent>
             </Tabs>
 
-            <MetricsChart history={state.roundHistory} />
+            <MetricsChart 
+              history={state.roundHistory}
+              clientModels={new Map(
+                state.clients.map(c => [
+                  c.id, 
+                  { 
+                    weights: c.lastLocalModel || { layers: [], bias: [] }, 
+                    name: c.name 
+                  }
+                ])
+              )}
+              clusterModels={clientModels}
+              globalModel={state.globalModel}
+            />
           </div>
 
         </div>
