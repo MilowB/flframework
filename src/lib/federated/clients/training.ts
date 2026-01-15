@@ -88,7 +88,7 @@ export const simulateClientTraining = async (
   onStatusUpdate?: (status: 'training' | 'evaluating') => void,
   currentRound?: number,
   globalModelFromServer?: ModelWeights
-): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number }> => {
+): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number; gradientNorm: number }> => {
   // Ensure MNIST is loaded
   let trainData = mnistTrainData;
   if (!trainData) {
