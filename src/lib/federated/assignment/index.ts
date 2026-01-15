@@ -11,6 +11,7 @@ export interface AssignmentContext {
     clusterClientIds?: string[][]; // array of clusters (for probabilistic)
     selectedClients?: ClientState[];
     round?: number; // numéro du round fédéré
+    distanceMetric?: 'l1' | 'l2' | 'cosine';
 }
 
 export const applyAssignment = (
@@ -34,7 +35,8 @@ export const applyAssignment = (
                 const assignments = computeProbabilisticAssignments(
                     context.selectedClients,
                     context.clusterClientIds,
-                    context.globalModel
+                    context.globalModel,
+                    context.distanceMetric || 'cosine'
                 );
                 const idx = assignments[client.id];
                 if (typeof idx === 'number' && context.clusterModels[idx]) {

@@ -5,7 +5,7 @@ import type { ModelWeights, ClientState } from '../core/types';
 import { getRng } from '../core/random';
 import { clusterModelStore } from '../core/stores';
 import { unflattenWeights, vectorizeModel, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE } from '../models/mlp';
-import { l2Distance } from '../clustering/louvain';
+import { computeDistance } from '../clustering/louvain';
 
 import {
   pca3D_single
@@ -17,7 +17,8 @@ const EPSILON = 1e-6;
 export const computeProbabilisticAssignments = (
   selectedClients: ClientState[],
   clusterClientIds: string[][],
-  globalModel: ModelWeights
+  globalModel: ModelWeights,
+  distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine'
 ): Record<string, number> => {
   const assignments: Record<string, number> = {};
   const rng = getRng();
@@ -40,7 +41,7 @@ export const computeProbabilisticAssignments = (
       //const pca3d = pca3D_single(clusterVec);
       //console.log(`Cluster ${idx} PCA3D:`, pca3d);
 
-      return l2Distance(clientVec, clusterVec);
+      return computeDistance(clientVec, clusterVec, distanceMetric);
     });
     
     // Check for clusters at zero distance (within epsilon)

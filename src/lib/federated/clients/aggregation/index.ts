@@ -25,11 +25,12 @@ export const applyClientAggregation = (
     version: number;
   }>,
   currentRound?: number,
-  clientId?: string
+  clientId?: string,
+  globalModel?: MLPWeights
 ): MLPWeights => {
   switch (method) {
     case 'gravity':
-      return applyGravityAggregation(receivedModel, previousLocalModel, localModelHistory, receivedModelHistory, 0.1, currentRound, clientId);
+      return applyGravityAggregation(receivedModel, previousLocalModel, localModelHistory, receivedModelHistory, 0.1, currentRound, clientId, globalModel);
     case '50-50':
       return applyFiftyFiftyAggregation(receivedModel, previousLocalModel);
     case 'none':

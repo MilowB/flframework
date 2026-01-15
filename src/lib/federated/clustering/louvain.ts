@@ -3,14 +3,59 @@
 
 import { getRng } from '../core/random';
 
-// Compute L2 distance between two vectors
-export const l2Distance = (a: number[], b: number[]): number => {
-  let s = 0;
+// Compute L1 (Manhattan) distance between two vectors
+export const l1Distance = (a: number[], b: number[]): number => {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    sum += Math.abs(a[i] - b[i]);
+  }
+  return sum;
+};
+
+// Compute L2 (Euclidean) distance between two vectors
+export const l2DistanceEuclidean = (a: number[], b: number[]): number => {
+  let sum = 0;
   for (let i = 0; i < a.length; i++) {
     const d = a[i] - b[i];
-    s += d * d;
+    sum += d * d;
   }
-  return Math.sqrt(s);
+  return Math.sqrt(sum);
+};
+
+// Compute cosine similarity between two vectors
+export const cosineSimilarity = (a: number[], b: number[]): number => {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  if (denominator === 0) return 0;
+  return dotProduct / denominator;
+};
+
+// Compute distance using specified metric
+export const computeDistance = (a: number[], b: number[], metric: 'l1' | 'l2' | 'cosine' = 'cosine'): number => {
+  switch (metric) {
+    case 'l1':
+      return l1Distance(a, b);
+    case 'l2':
+      return l2DistanceEuclidean(a, b);
+    case 'cosine':
+    default:
+      const similarity = cosineSimilarity(a, b);
+      return 1 - similarity;
+  }
+};
+
+// Compute cosine distance (1 - cosine similarity) between two vectors
+// Kept for backward compatibility
+export const l2Distance = (a: number[], b: number[]): number => {
+  const similarity = cosineSimilarity(a, b);
+  return 1 - similarity;
 };
 
 // Convert distance matrix to adjacency (similarity) matrix using RBF kernel
@@ -98,6 +143,7 @@ export const louvainPartition = (A: number[][]): number[] => {
 
       let bestC = oldC;
       let bestDelta = 0;
+      // Faible valeur = grand cluster et inversement
       const resolution = 2;
       
       for (const [c, k_i_in] of neighCommWeights.entries()) {

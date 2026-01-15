@@ -18,6 +18,7 @@ import { useStrategyHyperparams } from '@/components/federated/StrategyHyperpara
 import GravityPanel from '@/components/federated/GravityPanel';
 import NonePanel from '@/components/federated/NonePanel';
 import FiftyFiftyPanel from '@/components/federated/FiftyFiftyPanel';
+import KmeansPanel from '@/components/federated/KmeansPanel';
 
 
 const IndexContent = () => {
@@ -25,6 +26,7 @@ const IndexContent = () => {
   // Ajout des états locaux pour les autres stratégies dynamiques
   const [none, setNone] = React.useState({ dynamicData: false });
   const [fiftyFifty, setFiftyFifty] = React.useState({ dynamicData: false });
+  const [kmeans, setKmeans] = React.useState({ numClusters: 3 });
   const {
     state,
     mnistLoaded,
@@ -37,11 +39,20 @@ const IndexContent = () => {
     loadExperiment,
   } = useFederatedLearning(6, gravity, none, fiftyFifty);
   const [gravityCollapsed, setGravityCollapsed] = React.useState(false);
+  const [kmeansCollapsed, setKmeansCollapsed] = React.useState(false);
 
   // Determine if gravity strategy is selected
   const isNone = state.serverConfig?.clientAggregationMethod === 'none';
   const isFiftyFifty = state.serverConfig?.clientAggregationMethod === '50-50';
   const isGravity = state.serverConfig?.clientAggregationMethod === 'gravity';
+  const isKmeans = state.serverConfig?.clusteringMethod === 'kmeans';
+
+  // Sync kmeans numClusters with serverConfig
+  React.useEffect(() => {
+    if (isKmeans && kmeans.numClusters !== state.serverConfig?.kmeansNumClusters) {
+      updateServerConfig({ kmeansNumClusters: kmeans.numClusters });
+    }
+  }, [kmeans.numClusters, isKmeans]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -121,6 +132,14 @@ const IndexContent = () => {
                 onChange={setGravity}
                 collapsed={gravityCollapsed}
                 onCollapseToggle={() => setGravityCollapsed((c) => !c)}
+              />
+            )}
+            {isKmeans && (
+              <KmeansPanel
+                value={kmeans}
+                onChange={setKmeans}
+                collapsed={kmeansCollapsed}
+                onCollapseToggle={() => setKmeansCollapsed((c) => !c)}
               />
             )}
             <Tabs defaultValue="network" className="w-full">

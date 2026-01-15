@@ -111,6 +111,7 @@ function l2DistanceMLP(a: MLPWeights, b: MLPWeights): number {
  * @param k Facteur d'ajustement de la contre-force
  * @param currentRound Numéro du round courant (optionnel)
  * @param clientId Identifiant du client (optionnel)
+ * @param globalModel Modèle global du serveur (moyenne sur tous les clients) (optionnel)
  */
 export const applyGravityAggregation = (
     receivedModel: MLPWeights,
@@ -127,7 +128,8 @@ export const applyGravityAggregation = (
     }>,
     k: number = 0.1, // facteur d'ajustement de la contre-force
     currentRound?: number, // numéro de round courant (optionnel)
-    clientId?: string // identifiant du client (optionnel)
+    clientId?: string, // identifiant du client (optionnel)
+    globalModel?: MLPWeights // modèle global du serveur (optionnel)
 ): MLPWeights => {
     // Si pas de modèle local précédent, on retourne le modèle reçu
     if (!previousLocalModel) {
@@ -154,14 +156,20 @@ export const applyGravityAggregation = (
     }
 
     if (clientId === "client-0") {
-        if (currentRound < 3 || currentRound >= 10) {
+        if (currentRound < 3) {
+            w = 1;
+        }
+        else if (currentRound >= 10) {
+            if (currentRound <= 11) {
+                receivedModel = globalModel;
+            }
             w = 1;
         }
         else {
             w = 0;
         }
     }
-    else{
+    else {
         w = 1;
     }
 

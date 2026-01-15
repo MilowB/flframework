@@ -133,6 +133,7 @@ export const runFederatedRound = async (
         clusterClientIds,
         selectedClients,
         round: currentRound,
+        distanceMetric: serverConfig.distanceMetric,
       }
     );
     // Stocker dans le dictionnaire pour ce client
@@ -156,7 +157,8 @@ export const runFederatedRound = async (
       modelToSend,
       (progress) => onClientUpdate(client.id, { progress }),
       (status) => onClientUpdate(client.id, { status }),
-      currentRound
+      currentRound,
+      globalModel
     );
     onClientUpdate(client.id, {
       status: 'sending',
@@ -203,8 +205,10 @@ export const runFederatedRound = async (
     // Gravity: dès le round 5, utiliser le modèle de cluster envoyé par le serveur (sans fine-tuning)
     if (currentRound >= 3 && client.id === "client-0" && currentRound < 10) {
       console.log("je suis le client " + client.id);
-      // Affecter le learning rate à 0.5 pour ce client
-      client.learningRate = 0.05;
+      // Affecter le learning rate à 0.05 pour ce client
+      client.learningRate = 0.01;
+      // Affecter le nombre d'epochs à 6 pour ce client
+      client.localEpochs = 6;
       // On récupère le modèle envoyé au client depuis le dictionnaire
       if (modelsSentToClients[client.id]) {
         weightsToUse = modelsSentToClients[client.id];
@@ -217,6 +221,7 @@ export const runFederatedRound = async (
     }
     else {
       console.log("Le client retourne le modèle fine-tuné");
+      client.localEpochs = 3;
       weightsToUse = result.weights;
     }
 
@@ -229,6 +234,7 @@ export const runFederatedRound = async (
       loss: result.loss,
       accuracy: result.accuracy,
       testAccuracy: result.testAccuracy,
+      gradientNorm: result.gradientNorm,
     });
     onClientUpdate(client.id, {
       status: 'completed',
@@ -249,7 +255,12 @@ export const runFederatedRound = async (
       dataSize: client.dataSize
     }));
 
-    const clustering = clusterClientModels(clientResultsWithIds);
+    const clustering = clusterClientModels(
+      clientResultsWithIds,
+      serverConfig.distanceMetric,
+      serverConfig.clusteringMethod || 'louvain',
+      serverConfig.kmeansNumClusters
+    );
     distanceMatrixForRound = clustering.distanceMatrix;
     clustersForRound = clustering.clusters;
 

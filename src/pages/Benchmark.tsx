@@ -726,7 +726,7 @@ const ExperimentPanel = ({
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
                     <SelectItem value="50-50">50/50</SelectItem>
-                    <SelectItem value="gravity">Gravité</SelectItem>
+                    <SelectItem value="gravity">Distances Inter-modèles</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -919,7 +919,7 @@ const ExperimentPanel = ({
 
             {clientAggMethod === 'gravity' && (
               <div className="mt-6 p-4 rounded-lg border border-primary/30 bg-primary/5">
-                <h4 className="text-sm font-medium mb-4 text-primary">Gravité – Hyperparamètres</h4>
+                <h4 className="text-sm font-medium mb-4 text-primary">Distances Inter-modèles – Hyperparamètres</h4>
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div>
                     <Label className="text-xs text-muted-foreground">Constante gravitation (G)</Label>

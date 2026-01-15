@@ -35,7 +35,7 @@ export const GravityPanel: React.FC<GravityPanelProps> = ({ value, onChange, col
     <Card className="mb-4 mx-auto max-w-xl border-primary/40">
       <CardHeader className="flex flex-row items-center justify-between cursor-pointer select-none" onClick={onCollapseToggle}>
         <CardTitle className="text-base flex items-center gap-2">
-          Gravité – Hyperparamètres
+          Distances Inter-modèles – Hyperparamètres
         </CardTitle>
         <Button variant="ghost" size="sm" onClick={onCollapseToggle}>
           {collapsed ? '▼' : '▲'}
@@ -43,20 +43,6 @@ export const GravityPanel: React.FC<GravityPanelProps> = ({ value, onChange, col
       </CardHeader>
       {!collapsed && (
         <CardContent className="space-y-4">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <Label>Constante gravitation (G)</Label>
-              <Input type="number" step="any" value={local.gravitationConstant} onChange={e => handleChange('gravitationConstant', parseFloat(e.target.value))} />
-            </div>
-            <div className="flex-1">
-              <Label>Poids du cluster</Label>
-              <Input type="number" step="any" value={local.clusterWeight} onChange={e => handleChange('clusterWeight', parseFloat(e.target.value))} />
-            </div>
-            <div className="flex-1">
-              <Label>Poids du client</Label>
-              <Input type="number" step="any" value={local.clientWeight} onChange={e => handleChange('clientWeight', parseFloat(e.target.value))} />
-            </div>
-          </div>
           <div className="flex items-center gap-3">
             <Switch checked={local.dynamicData} onCheckedChange={v => handleChange('dynamicData', v)} />
             <Label>Données dynamiques</Label>

@@ -41,12 +41,16 @@ export interface ClientState {
   lastLocalModel?: ModelWeights;
   clientAggregationMethod?: 'none' | '50-50' | 'gravity';
   learningRate?: number;
+  localEpochs?: number;
 }
 
 export interface ServerConfig {
   aggregationMethod: 'fedavg' | 'fedprox' | 'scaffold' | 'custom';
   clientAggregationMethod?: 'none' | '50-50' | 'gravity';
   modelAssignmentMethod?: '1NN' | 'Probabiliste';
+  distanceMetric?: 'l1' | 'l2' | 'cosine';
+  clusteringMethod?: 'louvain' | 'kmeans' | 'leiden';
+  kmeansNumClusters?: number; // Number of clusters for K-means (optional, auto-detect if not specified)
   clientsPerRound: number;
   totalRounds: number;
   minClientsRequired: number;
@@ -75,6 +79,7 @@ export interface ClientRoundMetrics {
   loss: number;
   accuracy: number;
   testAccuracy: number;
+  gradientNorm?: number;
 }
 
 export interface RoundMetrics {

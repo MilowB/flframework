@@ -61,6 +61,7 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
             </SelectContent>
           </Select>
         </div>
+
         {/* Model Architecture */}
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -110,6 +111,62 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
                   </div>
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Métrique de distance */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Cpu className="w-4 h-4" />
+            Métrique de distance
+          </Label>
+          <Select
+            value={config.distanceMetric ?? 'cosine'}
+            onValueChange={(value: 'l1' | 'l2' | 'cosine') => onConfigChange({ distanceMetric: value })}
+            disabled={disabled}
+          >
+            <SelectTrigger className="bg-muted/50 border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="l1">
+                <span className="font-medium">L1 (Manhattan)</span>
+              </SelectItem>
+              <SelectItem value="l2">
+                <span className="font-medium">L2 (Euclidienne)</span>
+              </SelectItem>
+              <SelectItem value="cosine">
+                <span className="font-medium">Cosine Similarity</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Méthode de clustering */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Cpu className="w-4 h-4" />
+            Méthode de clustering
+          </Label>
+          <Select
+            value={config.clusteringMethod ?? 'louvain'}
+            onValueChange={(value: 'louvain' | 'kmeans' | 'leiden') => onConfigChange({ clusteringMethod: value })}
+            disabled={disabled}
+          >
+            <SelectTrigger className="bg-muted/50 border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="louvain">
+                <span className="font-medium">Louvain</span>
+              </SelectItem>
+              <SelectItem value="kmeans">
+                <span className="font-medium">K-means</span>
+              </SelectItem>
+              <SelectItem value="leiden">
+                <span className="font-medium">Leiden</span>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>

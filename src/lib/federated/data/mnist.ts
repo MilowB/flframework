@@ -107,7 +107,8 @@ export const getClientDataSubset = (
   clientId: string,
   numSamples: number,
   nonIID: boolean = true,
-  seed: number = 42
+  seed: number = 42,
+  distributionMode: 'pairs' | 'groups' = 'pairs'
 ): { inputs: number[][]; outputs: number[][] } => {
   const inputs: number[][] = [];
   const outputs: number[][] = [];
@@ -119,7 +120,18 @@ export const getClientDataSubset = (
     if (m) clientIndex = Number(m[1]);
     else clientIndex = clientId.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7) & 0xffffffff;
 
-    const pairIndex = Math.floor(clientIndex / 2);
+    let groupIndex: number;
+    if (distributionMode === 'groups') {
+      // Distribution par groupes: (0,1,2), (3,4,5), (6,7,8,9)
+      if (clientIndex <= 2) groupIndex = 0;
+      else if (clientIndex <= 5) groupIndex = 1;
+      else groupIndex = 2;
+    } else {
+      // Distribution par paires (comportement par défaut)
+      groupIndex = Math.floor(clientIndex / 2);
+    }
+
+    const pairIndex = groupIndex;
 
     let primaryLabel: number;
     if (pairLabelMap.has(pairIndex)) {

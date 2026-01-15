@@ -45,13 +45,49 @@ export const evaluateClientOnTestSet = (
   return computeAccuracy(testData.inputs, testData.outputs, localMLP);
 };
 
+// Compute gradient norm (L2 norm of the weight difference before/after training)
+export const computeGradientNorm = (before: MLPWeights, after: MLPWeights): number => {
+  let sumSquares = 0;
+  
+  // W1 differences
+  for (let i = 0; i < before.W1.length; i++) {
+    for (let j = 0; j < before.W1[i].length; j++) {
+      const diff = after.W1[i][j] - before.W1[i][j];
+      sumSquares += diff * diff;
+    }
+  }
+  
+  // b1 differences
+  for (let i = 0; i < before.b1.length; i++) {
+    const diff = after.b1[i] - before.b1[i];
+    sumSquares += diff * diff;
+  }
+  
+  // W2 differences
+  for (let i = 0; i < before.W2.length; i++) {
+    for (let j = 0; j < before.W2[i].length; j++) {
+      const diff = after.W2[i][j] - before.W2[i][j];
+      sumSquares += diff * diff;
+    }
+  }
+  
+  // b2 differences
+  for (let i = 0; i < before.b2.length; i++) {
+    const diff = after.b2[i] - before.b2[i];
+    sumSquares += diff * diff;
+  }
+  
+  return Math.sqrt(sumSquares);
+};
+
 // Real client training with MLP on MNIST data
 export const simulateClientTraining = async (
   client: ClientState,
   globalModel: ModelWeights,
   onProgress: (progress: number) => void,
   onStatusUpdate?: (status: 'training' | 'evaluating') => void,
-  currentRound?: number
+  currentRound?: number,
+  globalModelFromServer?: ModelWeights
 ): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number }> => {
   // Ensure MNIST is loaded
   let trainData = mnistTrainData;
@@ -91,9 +127,19 @@ export const simulateClientTraining = async (
 
   console.log(`Traitement du client ${client.id}`);
   const aggregationMethod = client.clientAggregationMethod || 'none';
-  const startingModel = applyClientAggregation(aggregationMethod, receivedMLP, previousLocalMLP, client.localModelHistory, client.receivedModelHistory, currentRound, client.id);
+  
+  // Convertir le modèle global en format MLP si disponible
+  const globalMLP = globalModelFromServer
+    ? unflattenWeights(
+        { layers: globalModelFromServer.layers, bias: globalModelFromServer.bias },
+        MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE
+      )
+    : undefined;
+  
+  const startingModel = applyClientAggregation(aggregationMethod, receivedMLP, previousLocalMLP, client.localModelHistory, client.receivedModelHistory, currentRound, client.id, globalMLP);
 
-  // Clone weights for local training
+  // Clone weights for local training - keep a copy of the model before training for gradient norm
+  const modelBeforeTraining = cloneWeights(startingModel);
   const localMLP = cloneWeights(startingModel);
 
   // Get or generate client-specific MNIST subset (non-IID) using global seed
@@ -109,7 +155,8 @@ export const simulateClientTraining = async (
   const { inputs, outputs } = clientDataStore.get(client.id)!;
 
   // Training configuration for MNIST
-  const localEpochs = 3;
+  // Utilise le nombre d'epochs du client s'il est défini, sinon 3 par défaut
+  const localEpochs = client.localEpochs !== undefined ? client.localEpochs : 3;
   // Utilise le learning rate du client s'il est défini, sinon 0.01 par défaut
   const learningRate = client.learningRate !== undefined ? client.learningRate : 0.01;
 
@@ -131,6 +178,9 @@ export const simulateClientTraining = async (
   onStatusUpdate?.('evaluating');
   await new Promise(resolve => setTimeout(resolve, 100));
   const testAccuracy = evaluateClientOnTestSet(client.id, localMLP);
+
+  // Compute gradient norm (L2 norm of weight changes during training)
+  const gradientNorm = computeGradientNorm(modelBeforeTraining, localMLP);
 
   // Convert back to flat format
   const flat = flattenWeights(localMLP);
@@ -171,6 +221,7 @@ export const simulateClientTraining = async (
     loss,
     accuracy,
     testAccuracy,
+    gradientNorm,
   };
 };
 

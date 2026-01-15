@@ -1,13 +1,17 @@
 // Clustering module exports
 export * from './louvain';
+export * from './kmeans';
+export * from './leiden';
 
 import type { ModelWeights } from '../core/types';
 import { modelWeightsToMLPWeights, vectorizeModel } from '../models/mlp';
-import { l2Distance, distancesToAdjacency, louvainPartition, refinePartition } from './louvain';
+import { computeDistance, distancesToAdjacency, louvainPartition, refinePartition } from './louvain';
+import { kmeansClustering, determineOptimalK } from './kmeans';
+import { leidenPartition } from './leiden';
 import { clusterModelStore } from '../core/stores';
 
 // Compute distance matrix between client models
-export const computeDistanceMatrix = (models: { layers: number[][]; bias: number[] }[]): number[][] => {
+export const computeDistanceMatrix = (models: { layers: number[][]; bias: number[] }[], distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine'): number[][] => {
   const n = models.length;
   const vecs = models.map(m => {
     const mlp = modelWeightsToMLPWeights(m);
@@ -17,7 +21,7 @@ export const computeDistanceMatrix = (models: { layers: number[][]; bias: number
   const D: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const d = l2Distance(vecs[i], vecs[j]);
+      const d = computeDistance(vecs[i], vecs[j], distanceMetric);
       D[i][j] = d;
       D[j][i] = d;
     }
@@ -25,8 +29,13 @@ export const computeDistanceMatrix = (models: { layers: number[][]; bias: number
   return D;
 };
 
-// Cluster client models using Louvain community detection
-export const clusterClientModels = (clientResults: { id?: string; weights: ModelWeights; dataSize: number }[]) => {
+// Cluster client models using specified clustering algorithm
+export const clusterClientModels = (
+  clientResults: { id?: string; weights: ModelWeights; dataSize: number }[],
+  distanceMetric?: 'l1' | 'l2' | 'cosine',
+  clusteringMethod: 'louvain' | 'kmeans' | 'leiden' = 'louvain',
+  kmeansNumClusters?: number
+) => {
   const validModels: { layers: number[][]; bias: number[] }[] = [];
   const ids: number[] = [];
   for (let i = 0; i < clientResults.length; i++) {
@@ -40,12 +49,36 @@ export const clusterClientModels = (clientResults: { id?: string; weights: Model
     }
   }
 
-  const D = computeDistanceMatrix(validModels);
+  const D = computeDistanceMatrix(validModels, distanceMetric);
   if (validModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][] };
 
-  const A = distancesToAdjacency(D);
-  const partition = louvainPartition(A);
-  const refined = refinePartition(A, partition.slice());
+  let refined: number[];
+
+  if (clusteringMethod === 'kmeans') {
+    // K-means clustering
+    const vecs = validModels.map(m => {
+      const mlp = modelWeightsToMLPWeights(m);
+      return vectorizeModel(mlp);
+    });
+    
+    // Use specified k or determine optimal k automatically
+    let k: number;
+    if (kmeansNumClusters && kmeansNumClusters > 0) {
+      k = Math.min(kmeansNumClusters, validModels.length);
+    } else {
+      k = Math.min(determineOptimalK(vecs, distanceMetric, 5), validModels.length);
+    }
+    refined = kmeansClustering(vecs, k, distanceMetric);
+  } else if (clusteringMethod === 'leiden') {
+    // Leiden clustering
+    const A = distancesToAdjacency(D);
+    refined = leidenPartition(A);
+  } else {
+    // Louvain clustering (default)
+    const A = distancesToAdjacency(D);
+    const partition = louvainPartition(A);
+    refined = refinePartition(A, partition.slice());
+  }
 
   // Build clusters of client ids
   const clustersMap = new Map<number, string[]>();
