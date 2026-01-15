@@ -362,17 +362,25 @@ export function ModelVisualization3D({
       const isCluster = !isGlobal && i >= allClientMeta.length;
       const meta = allMeta[i];
       
+      // Get colorIndex from the appropriate meta array
+      let colorIndex: number | undefined;
+      if (!isGlobal && !isCluster && i < allClientMeta.length) {
+        colorIndex = allClientMeta[i].colorIndex;
+      } else if (isCluster) {
+        colorIndex = allClusterMeta[i - allClientMeta.length].colorIndex;
+      }
+      
       return {
         roundIndex: meta.roundIndex,
         id: meta.id,
         name: isGlobal ? meta.name : isCluster ? meta.name : meta.id.replace('client-', ''),
         type: (isGlobal ? 'global' : isCluster ? 'cluster' : 'client') as 'client' | 'cluster' | 'global',
         position: coords,
-        clusterIdx: meta.colorIndex,
+        clusterIdx: colorIndex,
         color: isGlobal 
           ? GLOBAL_COLOR 
-          : meta.colorIndex !== undefined 
-            ? CLUSTER_COLORS[meta.colorIndex % CLUSTER_COLORS.length] 
+          : colorIndex !== undefined 
+            ? CLUSTER_COLORS[colorIndex % CLUSTER_COLORS.length] 
             : CLUSTER_COLORS[0]
       };
     });
