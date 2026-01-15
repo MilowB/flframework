@@ -6,12 +6,14 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { TrendingDown, TrendingUp, Server, Layers, Users, Box } from 'lucide-react';
 import SimilarityMatrix from './SimilarityMatrix';
 import { ModelVisualization3D } from './ModelVisualization3D';
+import { Model3DPosition } from '@/lib/federated/visualization/pca';
 
 interface MetricsChartProps {
   history: RoundMetrics[];
   clientModels?: Map<string, { weights: { layers: number[][]; bias: number[] }; name: string }>;
   clusterModels?: Map<string, { layers: number[][]; bias: number[] }>;
   globalModel?: ModelWeights | null;
+  loadedVisualizations?: { round: number; models: Model3DPosition[] }[];
 }
 
 // Color palette for multiple lines
@@ -26,7 +28,7 @@ const COLORS = [
   'hsl(60, 72%, 50%)',  // Yellow
 ];
 
-export const MetricsChart = ({ history, clientModels, clusterModels, globalModel }: MetricsChartProps) => {
+export const MetricsChart = ({ history, clientModels, clusterModels, globalModel, loadedVisualizations }: MetricsChartProps) => {
   // Server chart data (global model)
   const serverChartData = useMemo(() => history.map((h) => ({
     round: h.round + 1,
@@ -489,6 +491,7 @@ export const MetricsChart = ({ history, clientModels, clusterModels, globalModel
                 clientModels={clientModels}
                 clusterModels={clusterModels}
                 globalModel={globalModel}
+                loadedVisualizations={loadedVisualizations}
               />
             </TabsContent>
           </Tabs>

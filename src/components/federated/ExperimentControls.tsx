@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Save, Upload } from 'lucide-react';
 import { FederatedState, ModelWeights } from '@/lib/federated/types';
 import { saveExperiment, loadExperiment, ExperimentData } from '@/lib/federated/experimentStorage';
+import { Model3DPosition } from '@/lib/federated/visualization/pca';
 import { toast } from 'sonner';
 
 interface ExperimentControlsProps {
@@ -10,13 +11,15 @@ interface ExperimentControlsProps {
   clientModels: Map<string, ModelWeights>;
   onLoad: (data: ExperimentData) => void;
   disabled?: boolean;
+  visualizations3D?: { round: number; models: Model3DPosition[] }[];
 }
 
 export const ExperimentControls = ({ 
   state, 
   clientModels, 
   onLoad,
-  disabled 
+  disabled,
+  visualizations3D
 }: ExperimentControlsProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -25,7 +28,7 @@ export const ExperimentControls = ({
       toast.error('Aucune donnée à sauvegarder');
       return;
     }
-    saveExperiment(state, clientModels);
+    saveExperiment(state, clientModels, visualizations3D);
     toast.success('Expérience sauvegardée');
   };
 

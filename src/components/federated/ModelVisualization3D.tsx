@@ -1,11 +1,13 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text, Sphere } from '@react-three/drei';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { RoundMetrics } from '@/lib/federated/types';
 import { Model3DPosition, RoundSnapshot3D, flattenModelWeights } from '@/lib/federated/visualization/pca';
 import * as THREE from 'three';
+import GIF from 'gif.js';
+import { toast } from 'sonner';
 
 // Import computePCAProjection and CLUSTER_COLORS from pca module
 function computePCAProjection(vectors: number[][], numComponents: number = 3): number[][] {
@@ -59,6 +61,7 @@ interface ModelVisualization3DProps {
   clientModels?: Map<string, { weights: { layers: number[][]; bias: number[] }; name: string }>;
   clusterModels?: Map<string, { layers: number[][]; bias: number[] }>;
   globalModel?: { layers: number[][]; bias: number[]; version: number } | null;
+  loadedVisualizations?: { round: number; models: Model3DPosition[] }[];
 }
 
 // Individual model sphere/box component
@@ -83,6 +86,8 @@ function ModelSphere({
   const groupRef = useRef<THREE.Group>(null);
   const targetPosition = useRef(new THREE.Vector3(...position));
   const isInitialized = useRef(false);
+  const [showBox, setShowBox] = useState(shape !== 'box'); // Boxes (clusters) start hidden
+  const [currentColor, setCurrentColor] = useState(color); // Track current color for delayed update
   
   // Initialize position on first render
   useEffect(() => {
@@ -96,6 +101,19 @@ function ModelSphere({
   useEffect(() => {
     targetPosition.current.set(...position);
   }, [position]);
+  
+  // Update color with delay for boxes (clusters)
+  useEffect(() => {
+    if (shape === 'box') {
+      const timer = setTimeout(() => {
+        setCurrentColor(color);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      // Immediate color change for spheres
+      setCurrentColor(color);
+    }
+  }, [color, shape]);
   
   // Animate position and scale
   useFrame(() => {
@@ -111,10 +129,21 @@ function ModelSphere({
     }
   });
   
-  // Update group position immediately for boxes (clusters)
+  // Update group position with delay for boxes (clusters)
   useEffect(() => {
     if (shape === 'box' && groupRef.current) {
-      groupRef.current.position.set(...position);
+      // Hide box first
+      setShowBox(false);
+      
+      // Wait 500ms for client transitions to complete, then show and position box
+      const timer = setTimeout(() => {
+        if (groupRef.current) {
+          groupRef.current.position.set(...position);
+          setShowBox(true);
+        }
+      }, 500);
+      
+      return () => clearTimeout(timer);
     }
   }, [position, shape]);
   
@@ -123,26 +152,28 @@ function ModelSphere({
   
   return (
     <group ref={groupRef}>
-      <mesh
-        ref={meshRef}
-        onPointerOver={() => onHover(true)}
-        onPointerOut={() => onHover(false)}
-      >
-        {shape === 'box' ? (
-          <boxGeometry args={[boxSize, boxSize, boxSize]} />
-        ) : (
-          <sphereGeometry args={[radius, 32, 32]} />
-        )}
-        <meshStandardMaterial 
-          color={color} 
-          emissive={color}
-          emissiveIntensity={isHovered ? 0.5 : 0.2}
-          roughness={0.3}
-          metalness={0.7}
-        />
-      </mesh>
+      {showBox && (
+        <mesh
+          ref={meshRef}
+          onPointerOver={() => onHover(true)}
+          onPointerOut={() => onHover(false)}
+        >
+          {shape === 'box' ? (
+            <boxGeometry args={[boxSize, boxSize, boxSize]} />
+          ) : (
+            <sphereGeometry args={[radius, 32, 32]} />
+          )}
+          <meshStandardMaterial 
+            color={currentColor} 
+            emissive={currentColor}
+            emissiveIntensity={isHovered ? 0.5 : 0.2}
+            roughness={0.3}
+            metalness={0.7}
+          />
+        </mesh>
+      )}
       {/* Always show label for clients, hover for others */}
-      {(type === 'client' || isHovered) && (
+      {showBox && (type === 'client' || isHovered) && (
         <Text
           position={[0, (shape === 'box' ? boxSize/2 : radius) + 0.3, 0]}
           fontSize={type === 'client' ? 0.2 : 0.25}
@@ -155,6 +186,17 @@ function ModelSphere({
       )}
     </group>
   );
+}
+
+// Helper component to capture canvas reference
+function CanvasCapture({ canvasRef }: { canvasRef: React.MutableRefObject<HTMLCanvasElement | null> }) {
+  const { gl } = useThree();
+  
+  useEffect(() => {
+    canvasRef.current = gl.domElement;
+  }, [gl, canvasRef]);
+  
+  return null;
 }
 
 // Scene component
@@ -230,16 +272,170 @@ function Scene({ positions }: { positions: Model3DPosition[] }) {
   );
 }
 
+// Export function to compute and extract all 3D positions for saving
+export function compute3DPositions(history: RoundMetrics[]): { round: number; models: Model3DPosition[] }[] {
+  if (!history.length) return [];
+  
+  // Build a stable cluster color mapping across all rounds
+  const clusterSignatureToColorIndex = new Map<string, number>();
+  let nextColorIndex = 0;
+  
+  const getClusterColorIndex = (clientIds: string[]): number => {
+    const signature = [...clientIds].sort().join(',');
+    if (!clusterSignatureToColorIndex.has(signature)) {
+      clusterSignatureToColorIndex.set(signature, nextColorIndex);
+      nextColorIndex = (nextColorIndex + 1) % CLUSTER_COLORS.length;
+    }
+    return clusterSignatureToColorIndex.get(signature)!;
+  };
+  
+  // Collect all models from all rounds
+  const allClientVectors: number[][] = [];
+  const allClientMeta: { roundIndex: number; id: string; name: string; colorIndex?: number }[] = [];
+  const allClusterVectors: number[][] = [];
+  const allClusterMeta: { roundIndex: number; id: string; name: string; colorIndex: number }[] = [];
+  const allGlobalVectors: number[][] = [];
+  const allGlobalMeta: { roundIndex: number; id: string; name: string }[] = [];
+  
+  history.forEach((roundData, roundIndex) => {
+    const clientToColorIndex = new Map<string, number>();
+    if (roundData.clusterMetrics) {
+      roundData.clusterMetrics.forEach((cm) => {
+        const colorIndex = getClusterColorIndex(cm.clientIds);
+        cm.clientIds.forEach(clientId => {
+          clientToColorIndex.set(clientId, colorIndex);
+        });
+      });
+    }
+    
+    if (roundData.clientMetrics) {
+      roundData.clientMetrics.forEach((cm) => {
+        if (cm.weights) {
+          const colorIndex = clientToColorIndex.get(cm.clientId);
+          allClientVectors.push(flattenModelWeights(cm.weights));
+          allClientMeta.push({
+            roundIndex,
+            id: cm.clientId,
+            name: cm.clientName,
+            colorIndex
+          });
+        }
+      });
+    }
+    
+    if (roundData.clusterMetrics) {
+      roundData.clusterMetrics.forEach((cm) => {
+        if (cm.weights) {
+          const colorIndex = getClusterColorIndex(cm.clientIds);
+          allClusterVectors.push(flattenModelWeights(cm.weights));
+          allClusterMeta.push({
+            roundIndex,
+            id: `cluster-${cm.clusterId}`,
+            name: `Cluster ${cm.clusterId}`,
+            colorIndex
+          });
+        }
+      });
+    }
+    
+    if (roundData.globalModelWeights) {
+      allGlobalVectors.push(flattenModelWeights(roundData.globalModelWeights));
+      allGlobalMeta.push({
+        roundIndex,
+        id: 'global',
+        name: 'Global'
+      });
+    }
+  });
+  
+  if (allClientVectors.length === 0) return [];
+  
+  // Compute PCA on all models together
+  const allVectors = [...allClientVectors, ...allClusterVectors, ...allGlobalVectors];
+  const allMeta = [...allClientMeta, ...allClusterMeta, ...allGlobalMeta];
+  
+  const dim = allVectors[0].length;
+  const mean = new Array(dim).fill(0);
+  for (const vec of allVectors) {
+    for (let i = 0; i < dim; i++) {
+      mean[i] += vec[i] / allVectors.length;
+    }
+  }
+  
+  const projVectors = computePCAProjection(allVectors.map(vec => vec.map((v, i) => v - mean[i])), 3);
+  
+  if (projVectors.length < 3) return [];
+  
+  // Project all vectors
+  const positions = allVectors.map((vec, i) => {
+    const centered = vec.map((v, j) => v - mean[j]);
+    const coords: [number, number, number] = [0, 0, 0];
+    for (let d = 0; d < 3; d++) {
+      coords[d] = centered.reduce((sum, v, j) => sum + v * projVectors[d][j], 0);
+    }
+    
+    const isGlobal = i >= allClientMeta.length + allClusterMeta.length;
+    const isCluster = !isGlobal && i >= allClientMeta.length;
+    const meta = allMeta[i];
+    
+    return {
+      roundIndex: meta.roundIndex,
+      id: meta.id,
+      name: isGlobal ? meta.name : isCluster ? meta.name : meta.id.replace('client-', ''),
+      type: (isGlobal ? 'global' : isCluster ? 'cluster' : 'client') as 'client' | 'cluster' | 'global',
+      position: coords,
+      clusterIdx: meta.colorIndex,
+      color: isGlobal 
+        ? GLOBAL_COLOR 
+        : meta.colorIndex !== undefined 
+          ? CLUSTER_COLORS[meta.colorIndex % CLUSTER_COLORS.length] 
+          : CLUSTER_COLORS[0]
+    };
+  });
+  
+  // Normalize all positions to same scale
+  const allCoords = positions.flatMap(p => p.position);
+  const maxAbs = Math.max(...allCoords.map(Math.abs), 1);
+  const scale = 5 / maxAbs;
+  
+  const normalizedPositions = positions.map(p => ({
+    ...p,
+    position: p.position.map(c => c * scale) as [number, number, number]
+  }));
+  
+  // Group by round
+  const byRound = new Map<number, Model3DPosition[]>();
+  normalizedPositions.forEach(pos => {
+    if (!byRound.has(pos.roundIndex)) {
+      byRound.set(pos.roundIndex, []);
+    }
+    byRound.get(pos.roundIndex)!.push(pos);
+  });
+  
+  return Array.from(byRound.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([round, models]) => ({ round, models }));
+}
+
 export function ModelVisualization3D({ 
   history, 
   clientModels, 
   clusterModels, 
-  globalModel 
+  globalModel,
+  loadedVisualizations
 }: ModelVisualization3DProps) {
   const [currentRound, setCurrentRound] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
   // Compute PCA once for all rounds to have a consistent reference frame
   const allRoundsPositions = useMemo(() => {
+    // If we have pre-loaded visualizations, use them instead of computing
+    if (loadedVisualizations && loadedVisualizations.length > 0) {
+      console.log('=== Using pre-loaded 3D visualizations ===');
+      return loadedVisualizations.flatMap(({ models }) => models);
+    }
+    
     if (!history.length) return [];
     
     console.log('=== Computing PCA for all rounds ===');
@@ -394,7 +590,7 @@ export function ModelVisualization3D({
       ...p,
       position: p.position.map(c => c * scale) as [number, number, number]
     }));
-  }, [history]);
+  }, [history, loadedVisualizations]);
   
   // Filter positions for current round
   const positions = useMemo(() => {
@@ -415,6 +611,72 @@ export function ModelVisualization3D({
   const handleNextRound = () => {
     setCurrentRound(prev => Math.min(maxRound, prev + 1));
   };
+  
+  const handleExportGif = useCallback(async () => {
+    if (!canvasRef.current || isExporting) return;
+    
+    setIsExporting(true);
+    toast.info('Génération du GIF en cours...');
+    
+    try {
+      const originalCanvas = canvasRef.current;
+      const width = originalCanvas.width;
+      const height = originalCanvas.height;
+      
+      console.log('Canvas dimensions:', width, height);
+      
+      const gif = new GIF({
+        workers: 2,
+        quality: 10,
+        width,
+        height,
+        workerScript: '/gif.worker.js',
+        background: '#000000'
+      });
+      
+      // Capture each round with multiple frames for smooth transitions
+      const framesPerRound = 5; // 5 frames per round for smoother animation
+      
+      for (let round = 0; round <= maxRound; round++) {
+        setCurrentRound(round);
+        
+        // Capture multiple frames during and after transition
+        for (let frame = 0; frame < framesPerRound; frame++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          console.log(`Captured frame ${round * framesPerRound + frame + 1}/${(maxRound + 1) * framesPerRound}`);
+          
+          // Capture frame directly from WebGL canvas
+          gif.addFrame(originalCanvas, { copy: true, delay: 200 }); // 200ms per frame = 1 second per round (5 frames)
+        }
+      }
+      
+      // Render GIF
+      gif.on('finished', (blob: Blob) => {
+        console.log('GIF rendering complete, size:', blob.size);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `federated-learning-3d-${Date.now()}.gif`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setIsExporting(false);
+        toast.success('GIF exporté avec succès !');
+      });
+      
+      gif.on('progress', (progress: number) => {
+        console.log('GIF progress:', Math.round(progress * 100) + '%');
+      });
+      
+      gif.render();
+    } catch (error) {
+      console.error('Error exporting GIF:', error);
+      toast.error('Erreur lors de l\'export du GIF');
+      setIsExporting(false);
+    }
+  }, [maxRound, isExporting]);
   
   if (history.length === 0) {
     return (
@@ -447,7 +709,9 @@ export function ModelVisualization3D({
         <Canvas
           camera={{ position: [8, 6, 8], fov: 50 }}
           style={{ background: 'transparent' }}
+          gl={{ preserveDrawingBuffer: true }}
         >
+          <CanvasCapture canvasRef={canvasRef} />
           <Scene positions={positions} />
         </Canvas>
       </div>
@@ -458,7 +722,7 @@ export function ModelVisualization3D({
           variant="outline" 
           size="icon"
           onClick={handlePrevRound}
-          disabled={currentRound === 0}
+          disabled={currentRound === 0 || isExporting}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -476,9 +740,19 @@ export function ModelVisualization3D({
           variant="outline" 
           size="icon"
           onClick={handleNextRound}
-          disabled={currentRound >= maxRound}
+          disabled={currentRound >= maxRound || isExporting}
         >
           <ChevronRight className="h-4 w-4" />
+        </Button>
+        
+        <Button 
+          variant="outline"
+          onClick={handleExportGif}
+          disabled={isExporting || maxRound < 1}
+          className="ml-2"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          {isExporting ? 'Export en cours...' : 'Export GIF'}
         </Button>
       </div>
       

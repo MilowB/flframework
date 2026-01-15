@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { FederatedState, ClientState, ServerConfig, ServerStatus, ModelWeights } from '@/lib/federated/types';
 import { initializeModel, createClient, runFederatedRound, preloadMNIST, getClientModels, setClientModels, setSeed } from '@/lib/federated/simulation';
 import { ExperimentData } from '@/lib/federated/experimentStorage';
+import { Model3DPosition } from '@/lib/federated/visualization/pca';
 // import { useStrategyHyperparams } from '@/components/federated/StrategyHyperparamsContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -49,6 +50,7 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
 
   const [mnistLoaded, setMnistLoaded] = useState(false);
   const abortRef = useRef(false);
+  const [loadedVisualizations3D, setLoadedVisualizations3D] = useState<{ round: number; models: Model3DPosition[] }[] | undefined>();
 
   // Preload MNIST on mount
   useEffect(() => {
@@ -273,6 +275,13 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
     });
     setClientModels(clientModelsMap);
     
+    // Restore 3D visualizations if available
+    if (data.visualizations3D) {
+      setLoadedVisualizations3D(data.visualizations3D);
+    } else {
+      setLoadedVisualizations3D(undefined);
+    }
+    
     setState(prev => ({
       ...prev,
       isRunning: false,
@@ -289,6 +298,7 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
     state,
     mnistLoaded,
     clientModels: getClientModels(),
+    loadedVisualizations3D,
     startTraining,
     stopTraining,
     resetTraining,

@@ -1,5 +1,6 @@
 // Experiment save/load utilities
 import type { FederatedState, RoundMetrics, ModelWeights } from '../core/types';
+import type { Model3DPosition } from '../visualization/pca';
 
 export interface ExperimentData {
   version: string;
@@ -8,6 +9,10 @@ export interface ExperimentData {
   globalModel: ModelWeights | null;
   roundHistory: RoundMetrics[];
   clientModels: { clientId: string; weights: ModelWeights }[];
+  visualizations3D?: {
+    round: number;
+    models: Model3DPosition[];
+  }[];
 }
 
 // Generate timestamped filename
@@ -20,17 +25,34 @@ const generateFilename = (): string => {
   return `federated-experiment-${timestamp}.json`;
 };
 
-export const saveExperiment = (state: FederatedState, clientModels: Map<string, ModelWeights>): void => {
+export const saveExperiment = (
+  state: FederatedState, 
+  clientModels: Map<string, ModelWeights>,
+  visualizations3D?: { round: number; models: Model3DPosition[] }[]
+): void => {
+  // Remove heavy weight data from round history for storage
+  const cleanedRoundHistory = state.roundHistory.map(round => {
+    const { clientMetrics, clusterMetrics, globalModelWeights, ...rest } = round;
+    return {
+      ...rest,
+      // Keep metrics but remove weights to reduce size
+      clientMetrics: clientMetrics?.map(({ weights, ...cm }) => cm),
+      clusterMetrics: clusterMetrics?.map(({ weights, ...cm }) => cm),
+      // Don't save globalModelWeights - too large and only needed for viz
+    };
+  });
+  
   const data: ExperimentData = {
     version: '1.0',
     savedAt: new Date().toISOString(),
     serverConfig: state.serverConfig,
     globalModel: state.globalModel,
-    roundHistory: state.roundHistory,
+    roundHistory: cleanedRoundHistory as RoundMetrics[],
     clientModels: Array.from(clientModels.entries()).map(([clientId, weights]) => ({
       clientId,
       weights,
     })),
+    visualizations3D,
   };
 
   const json = JSON.stringify(data, null, 2);

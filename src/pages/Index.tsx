@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useFederatedLearning } from '@/hooks/useFederatedLearning';
 import { ServerPanel } from '@/components/federated/ServerPanel';
 import { ClientCard } from '@/components/federated/ClientCard';
@@ -9,6 +9,7 @@ import { NetworkVisualization } from '@/components/federated/NetworkVisualizatio
 import { RoundHistory } from '@/components/federated/RoundHistory';
 import { CodePreview } from '@/components/federated/CodePreview';
 import { ExperimentControls } from '@/components/federated/ExperimentControls';
+import { compute3DPositions } from '@/components/federated/ModelVisualization3D';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Network, LayoutGrid, Code, Menu } from 'lucide-react';
@@ -31,6 +32,7 @@ const IndexContent = () => {
     state,
     mnistLoaded,
     clientModels,
+    loadedVisualizations3D,
     startTraining,
     stopTraining,
     resetTraining,
@@ -40,6 +42,13 @@ const IndexContent = () => {
   } = useFederatedLearning(6, gravity, none, fiftyFifty);
   const [gravityCollapsed, setGravityCollapsed] = React.useState(false);
   const [kmeansCollapsed, setKmeansCollapsed] = React.useState(false);
+
+  // Compute 3D positions for saving (only if not loaded from file)
+  const visualizations3D = useMemo(() => {
+    if (loadedVisualizations3D) return loadedVisualizations3D;
+    if (state.roundHistory.length === 0) return undefined;
+    return compute3DPositions(state.roundHistory);
+  }, [state.roundHistory, loadedVisualizations3D]);
 
   // Determine if gravity strategy is selected
   const isNone = state.serverConfig?.clientAggregationMethod === 'none';
@@ -76,6 +85,7 @@ const IndexContent = () => {
               clientModels={clientModels}
               onLoad={loadExperiment}
               disabled={state.isRunning}
+              visualizations3D={visualizations3D}
             />
           </div>
         </div>
@@ -199,6 +209,7 @@ const IndexContent = () => {
                 Array.from(clientModels.entries()).filter(([key]) => key.startsWith('cluster-'))
               )}
               globalModel={state.globalModel}
+              loadedVisualizations={loadedVisualizations3D}
             />
           </div>
 
