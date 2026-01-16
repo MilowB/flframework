@@ -378,17 +378,29 @@ export function compute3DPositions(history: RoundMetrics[]): { round: number; mo
     const isCluster = !isGlobal && i >= allClientMeta.length;
     const meta = allMeta[i];
     
+    // Get colorIndex from client or cluster meta arrays directly
+    let colorIndex: number | undefined;
+    if (!isGlobal && !isCluster) {
+      // It's a client - find in allClientMeta
+      const clientIdx = i;
+      colorIndex = allClientMeta[clientIdx]?.colorIndex;
+    } else if (isCluster) {
+      // It's a cluster - find in allClusterMeta
+      const clusterIdx = i - allClientMeta.length;
+      colorIndex = allClusterMeta[clusterIdx]?.colorIndex;
+    }
+    
     return {
       roundIndex: meta.roundIndex,
       id: meta.id,
       name: isGlobal ? meta.name : isCluster ? meta.name : meta.id.replace('client-', ''),
       type: (isGlobal ? 'global' : isCluster ? 'cluster' : 'client') as 'client' | 'cluster' | 'global',
       position: coords,
-      clusterIdx: meta.colorIndex,
+      clusterIdx: colorIndex,
       color: isGlobal 
         ? GLOBAL_COLOR 
-        : meta.colorIndex !== undefined 
-          ? CLUSTER_COLORS[meta.colorIndex % CLUSTER_COLORS.length] 
+        : colorIndex !== undefined 
+          ? CLUSTER_COLORS[colorIndex % CLUSTER_COLORS.length] 
           : CLUSTER_COLORS[0]
     };
   });

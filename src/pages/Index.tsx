@@ -1,18 +1,17 @@
 import React, { useMemo } from 'react';
 import { useFederatedLearning } from '@/hooks/useFederatedLearning';
 import { ServerPanel } from '@/components/federated/ServerPanel';
+import { ClientSettingsPanel } from '@/components/federated/ClientSettingsPanel';
 import { ClientCard } from '@/components/federated/ClientCard';
 import { ServerCard } from '@/components/federated/ServerCard';
 import { MetricsChart } from '@/components/federated/MetricsChart';
 import { ControlPanel } from '@/components/federated/ControlPanel';
 import { NetworkVisualization } from '@/components/federated/NetworkVisualization';
-import { RoundHistory } from '@/components/federated/RoundHistory';
-import { CodePreview } from '@/components/federated/CodePreview';
 import { ExperimentControls } from '@/components/federated/ExperimentControls';
 import { compute3DPositions } from '@/components/federated/ModelVisualization3D';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Network, LayoutGrid, Code, Menu } from 'lucide-react';
+import { Network, LayoutGrid } from 'lucide-react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { StrategyHyperparamsProvider } from '@/components/federated/StrategyHyperparamsProvider';
 import { useStrategyHyperparams } from '@/components/federated/StrategyHyperparamsContext';
@@ -63,6 +62,17 @@ const IndexContent = () => {
     }
   }, [kmeans.numClusters, isKmeans]);
 
+  // Handle client count change from ServerPanel
+  const handleClientCountChange = (count: number) => {
+    setClientCount(count);
+    updateServerConfig({ clientCount: count });
+  };
+
+  // Handle seed change
+  const handleSeedChange = (seed: number) => {
+    updateServerConfig({ seed });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -98,27 +108,33 @@ const IndexContent = () => {
           isRunning={state.isRunning}
           currentRound={state.currentRound}
           totalRounds={state.totalRounds}
-          clientCount={state.clients.length}
+          seed={state.serverConfig?.seed ?? 42}
           onStart={startTraining}
           onStop={stopTraining}
           onReset={resetTraining}
-          onClientCountChange={setClientCount}
+          onSeedChange={handleSeedChange}
         />
 
-        {/* Main Grid */}
+        {/* Main Grid - 3 columns */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Sidebar - Server Config */}
           <div className="lg:col-span-3">
             <ServerPanel
-              config={state.serverConfig}
-              onConfigChange={updateServerConfig}
+              config={{...state.serverConfig, clientCount: state.clients.length}}
+              onConfigChange={(config) => {
+                if (config.clientCount !== undefined) {
+                  handleClientCountChange(config.clientCount);
+                } else {
+                  updateServerConfig(config);
+                }
+              }}
               disabled={state.isRunning}
               globalModelVersion={state.globalModel?.version ?? 0}
             />
           </div>
 
           {/* Center - Visualization & Metrics */}
-          <div className="lg:col-span-9 space-y-6">
+          <div className="lg:col-span-6 space-y-6">
             {/* Client Aggregation Panels */}
             {isNone && (
               <NonePanel
@@ -153,7 +169,7 @@ const IndexContent = () => {
               />
             )}
             <Tabs defaultValue="network" className="w-full">
-              <TabsList className="w-full grid grid-cols-3 bg-muted/30">
+              <TabsList className="w-full grid grid-cols-2 bg-muted/30">
                 <TabsTrigger value="network" className="gap-2">
                   <Network className="w-4 h-4" />
                   Réseau
@@ -161,10 +177,6 @@ const IndexContent = () => {
                 <TabsTrigger value="machines" className="gap-2">
                   <LayoutGrid className="w-4 h-4" />
                   Machines
-                </TabsTrigger>
-                <TabsTrigger value="code" className="gap-2">
-                  <Code className="w-4 h-4" />
-                  API
                 </TabsTrigger>
               </TabsList>
 
@@ -188,10 +200,6 @@ const IndexContent = () => {
                   </div>
                 </ScrollArea>
               </TabsContent>
-
-              <TabsContent value="code" className="mt-4">
-                <CodePreview />
-              </TabsContent>
             </Tabs>
 
             <MetricsChart 
@@ -210,6 +218,15 @@ const IndexContent = () => {
               )}
               globalModel={state.globalModel}
               loadedVisualizations={loadedVisualizations3D}
+            />
+          </div>
+
+          {/* Right Sidebar - Client Settings */}
+          <div className="lg:col-span-3">
+            <ClientSettingsPanel
+              config={state.serverConfig}
+              onConfigChange={updateServerConfig}
+              disabled={state.isRunning}
             />
           </div>
 

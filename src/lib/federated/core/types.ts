@@ -56,6 +56,7 @@ export interface ServerConfig {
   minClientsRequired: number;
   modelArchitecture: string;
   seed?: number;
+  clientCount?: number;
 }
 
 export interface WeightsSnapshot {

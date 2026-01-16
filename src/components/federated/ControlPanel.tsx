@@ -1,29 +1,29 @@
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
-import { Play, Square, RotateCcw, Zap, Users } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Play, Square, RotateCcw, Zap, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ControlPanelProps {
   isRunning: boolean;
   currentRound: number;
   totalRounds: number;
-  clientCount: number;
+  seed: number;
   onStart: () => void;
   onStop: () => void;
   onReset: () => void;
-  onClientCountChange: (count: number) => void;
+  onSeedChange: (seed: number) => void;
 }
 
 export const ControlPanel = ({
   isRunning,
   currentRound,
   totalRounds,
-  clientCount,
+  seed,
   onStart,
   onStop,
   onReset,
-  onClientCountChange,
+  onSeedChange,
 }: ControlPanelProps) => {
   const progress = totalRounds > 0 ? (currentRound / totalRounds) * 100 : 0;
 
@@ -88,22 +88,19 @@ export const ControlPanel = ({
           </div>
         </div>
 
-        {/* Right: Client Count */}
-        <div className="flex items-center gap-4 min-w-[200px]">
-          <Users className="w-5 h-5 text-muted-foreground" />
+        {/* Right: Seed */}
+        <div className="flex items-center gap-4 min-w-[160px]">
+          <Hash className="w-5 h-5 text-muted-foreground" />
           <div className="flex-1">
-            <div className="flex items-center justify-between mb-1">
-              <Label className="text-sm text-muted-foreground">Clients</Label>
-              <span className="font-mono text-sm text-primary">{clientCount}</span>
-            </div>
-            <Slider
-              value={[clientCount]}
-              onValueChange={([value]) => onClientCountChange(value)}
-              min={2}
-              max={12}
+            <Label className="text-sm text-muted-foreground mb-1 block">Seed</Label>
+            <Input
+              type="number"
+              min={0}
               step={1}
+              value={seed}
+              onChange={e => onSeedChange(Number(e.target.value))}
               disabled={isRunning}
-              className="[&_[role=slider]]:bg-primary"
+              className="w-24 h-8"
             />
           </div>
         </div>
