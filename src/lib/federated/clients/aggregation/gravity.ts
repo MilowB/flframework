@@ -155,6 +155,7 @@ export const applyGravityAggregation = (
         //w = Math.max(0, Math.min(1, w));
     }
 
+    /*
     if (clientId === "client-0") {
         if (currentRound < 3) {
             w = 1;
@@ -167,6 +168,22 @@ export const applyGravityAggregation = (
         }
         else {
             w = 0;
+        }
+    }
+    else {
+        w = 1;
+    }
+    */
+
+    if (clientId === "client-0") {
+        if (currentRound < 3) {
+            w = 1;
+        }
+        else if (currentRound >= 6) {
+            if (currentRound <= 6) {
+                receivedModel = globalModel;
+            }
+            w = 1;
         }
     }
     else {

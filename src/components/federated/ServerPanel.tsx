@@ -70,7 +70,7 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
             value={[config.clientCount ?? 6]}
             onValueChange={([value]) => onConfigChange({ clientCount: value })}
             min={2}
-            max={12}
+            max={10}
             step={1}
             disabled={disabled}
             className="[&_[role=slider]]:bg-primary"

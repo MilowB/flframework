@@ -201,6 +201,7 @@ export const runFederatedRound = async (
     let weightsToUse = result.weights;
 
     // @debug HARDCODE DE STRATEGIE GRAVITY
+    /*
     await new Promise(resolve => setTimeout(resolve, 200));
     // Gravity: dès le round 5, utiliser le modèle de cluster envoyé par le serveur (sans fine-tuning)
     if (currentRound >= 3 && client.id === "client-0" && currentRound < 10) {
@@ -224,6 +225,7 @@ export const runFederatedRound = async (
       client.localEpochs = 3;
       weightsToUse = result.weights;
     }
+    */
 
     trainedClients[i].result.weights = weightsToUse;
 
@@ -307,9 +309,9 @@ export const runFederatedRound = async (
         for (const e of entries) clusterModelStore.set(e.id, averagedModel);
 
         const clusterAccuracy = evaluateClusterModel(grp, averagedModel, clientTestDataStore);
-        clusterMetricsForRound.push({ 
-          clusterId: clusterIdx, 
-          accuracy: clusterAccuracy, 
+        clusterMetricsForRound.push({
+          clusterId: clusterIdx,
+          accuracy: clusterAccuracy,
           clientIds: grp,
           weights: averagedModel // Store weights for visualization
         });
