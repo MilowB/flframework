@@ -88,26 +88,9 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
           </Label>
           <Slider
             value={[config.clientsPerRound]}
-            onValueChange={([value]) => onConfigChange({ clientsPerRound: value })}
+            onValueChange={([value]) => onConfigChange({ clientsPerRound: value, minClientsRequired: value })}
             min={1}
             max={10}
-            step={1}
-            disabled={disabled}
-            className="[&_[role=slider]]:bg-primary"
-          />
-        </div>
-
-        {/* Clients minimum requis */}
-        <div className="space-y-3">
-          <Label className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>Clients minimum requis</span>
-            <span className="font-mono text-primary">{config.minClientsRequired}</span>
-          </Label>
-          <Slider
-            value={[config.minClientsRequired]}
-            onValueChange={([value]) => onConfigChange({ minClientsRequired: value })}
-            min={1}
-            max={config.clientsPerRound}
             step={1}
             disabled={disabled}
             className="[&_[role=slider]]:bg-primary"
