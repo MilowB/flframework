@@ -189,6 +189,33 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
             </SelectContent>
           </Select>
         </div>
+
+        {/* Méthode de clustering */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+            Méthode de clustering
+          </Label>
+          <Select
+            value={config.clusteringMethod ?? 'louvain'}
+            onValueChange={(value: 'louvain' | 'kmeans' | 'leiden') => onConfigChange({ clusteringMethod: value })}
+            disabled={disabled}
+          >
+            <SelectTrigger className="bg-muted/50 border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="louvain">
+                <span className="font-medium">Louvain</span>
+              </SelectItem>
+              <SelectItem value="kmeans">
+                <span className="font-medium">K-means</span>
+              </SelectItem>
+              <SelectItem value="leiden">
+                <span className="font-medium">Leiden</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardContent>
     </Card>
   );
