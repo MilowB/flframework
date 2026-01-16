@@ -94,6 +94,8 @@ export interface Model3DPosition {
   type: 'client' | 'cluster' | 'global';
   position: [number, number, number];
   color: string;
+  roundIndex?: number;
+  clusterIdx?: number;
 }
 
 export interface RoundSnapshot3D {
