@@ -95,6 +95,7 @@ export interface RoundMetrics {
   timestamp: number;
   weightsSnapshot?: WeightsSnapshot;
   distanceMatrix?: number[][];
+  agreementMatrix?: number[][]; // Agreement matrix from consensus clustering
   clusters?: string[][];
   silhouetteAvg?: number;
   clusterMetrics?: ClusterMetrics[];
