@@ -9,6 +9,7 @@ import { computeDistance, distancesToAdjacency, louvainPartition, refinePartitio
 import { kmeansClustering, determineOptimalK } from './kmeans';
 import { leidenPartition } from './leiden';
 import { clusterModelStore } from '../core/stores';
+import { computeAgreementClustering } from '../server/agreement';
 
 // Compute distance matrix between client models
 export const computeDistanceMatrix = (models: { layers: number[][]; bias: number[] }[], distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine'): number[][] => {
@@ -34,7 +35,8 @@ export const clusterClientModels = (
   clientResults: { id?: string; weights: ModelWeights; dataSize: number }[],
   distanceMetric?: 'l1' | 'l2' | 'cosine',
   clusteringMethod: 'louvain' | 'kmeans' | 'leiden' = 'louvain',
-  kmeansNumClusters?: number
+  kmeansNumClusters?: number,
+  useAgreementMatrix?: boolean
 ) => {
   const validModels: { layers: number[][]; bias: number[] }[] = [];
   const ids: number[] = [];
@@ -51,6 +53,17 @@ export const clusterClientModels = (
 
   const D = computeDistanceMatrix(validModels, distanceMetric);
   if (validModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][] };
+
+  // Get client IDs
+  const clientIds = ids.map(i => 
+    clientResults[i] && clientResults[i].id ? clientResults[i].id! : `client-${i}`
+  );
+
+  // Use agreement matrix clustering if enabled (only for Louvain/Leiden)
+  if (useAgreementMatrix && (clusteringMethod === 'louvain' || clusteringMethod === 'leiden')) {
+    const { clusters } = computeAgreementClustering(D, clientIds, clusteringMethod);
+    return { distanceMatrix: D, clusters };
+  }
 
   let refined: number[];
 
