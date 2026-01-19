@@ -10,8 +10,5 @@ export const getModelFor1NN = (
   globalModel: ModelWeights
 ): ModelWeights => {
   // Return the cluster model if available, otherwise the global model
-  console.log("Client id :")
-  console.log(clientId)
-  console.log(clusterModelStore)
   return clusterModelStore.get(clientId) || globalModel;
 };

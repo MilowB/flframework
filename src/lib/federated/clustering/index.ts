@@ -5,11 +5,15 @@ export * from './leiden';
 
 import type { ModelWeights } from '../core/types';
 import { modelWeightsToMLPWeights, vectorizeModel } from '../models/mlp';
-import { computeDistance, distancesToAdjacency, louvainPartition, refinePartition } from './louvain';
-import { kmeansClustering, determineOptimalK } from './kmeans';
-import { leidenPartition } from './leiden';
+import { computeDistance, distancesToAdjacency, louvainPartitionWithRng, refinePartitionWithRng } from './louvain';
+import { kmeansClusteringWithRng, determineOptimalK } from './kmeans';
+import { leidenPartitionWithRng } from './leiden';
 import { clusterModelStore } from '../core/stores';
 import { computeAgreementClustering } from '../server/agreement';
+import { getSeed, SeededRandom } from '../core/random';
+
+// DEBUG: Log clustering RNG usage
+const DEBUG_CLUSTERING_RNG = false;
 
 // Compute distance matrix between client models
 export const computeDistanceMatrix = (models: { layers: number[][]; bias: number[] }[], distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine'): number[][] => {
@@ -65,6 +69,15 @@ export const clusterClientModels = (
     return { distanceMatrix: D, clusters, agreementMatrix };
   }
 
+  // Create an ISOLATED RNG for clustering to avoid affecting the global RNG
+  // This ensures clustering doesn't change simulation reproducibility
+  const isolatedSeed = getSeed() + 200000; // Different offset from agreement matrix
+  const isolatedRng = new SeededRandom(isolatedSeed);
+  
+  if (DEBUG_CLUSTERING_RNG) {
+    console.log(`[Clustering] Using isolated RNG with seed ${isolatedSeed}`);
+  }
+
   let refined: number[];
 
   if (clusteringMethod === 'kmeans') {
@@ -81,16 +94,20 @@ export const clusterClientModels = (
     } else {
       k = Math.min(determineOptimalK(vecs, distanceMetric, 5), validModels.length);
     }
-    refined = kmeansClustering(vecs, k, distanceMetric);
+    refined = kmeansClusteringWithRng(vecs, k, distanceMetric, isolatedRng);
   } else if (clusteringMethod === 'leiden') {
     // Leiden clustering
     const A = distancesToAdjacency(D);
-    refined = leidenPartition(A);
+    refined = leidenPartitionWithRng(A, isolatedRng);
   } else {
     // Louvain clustering (default)
     const A = distancesToAdjacency(D);
-    const partition = louvainPartition(A);
-    refined = refinePartition(A, partition.slice());
+    const partition = louvainPartitionWithRng(A, isolatedRng);
+    refined = refinePartitionWithRng(A, partition.slice(), isolatedRng);
+  }
+
+  if (DEBUG_CLUSTERING_RNG) {
+    console.log(`[Clustering] Completed, global RNG unchanged`);
   }
 
   // Build clusters of client ids

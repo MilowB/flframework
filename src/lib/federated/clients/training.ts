@@ -125,7 +125,6 @@ export const simulateClientTraining = async (
     )
     : null;
 
-  console.log(`Traitement du client ${client.id}`);
   const aggregationMethod = client.clientAggregationMethod || 'none';
   
   // Initialize gradient norm history if not exists
@@ -206,8 +205,6 @@ export const simulateClientTraining = async (
   // PCA 3D du modèle client après fine-tuning
   //const clientVec = vectorizeModel(localMLP);
   //const pca3d = pca3D_single(clientVec);
-  //console.log(`Client ${client.id} PCA3D:`, pca3d);
-  //console.log(`Client ${client.id} model:`, localMLP);
   // Save the trained local model for future 50/50 aggregation
   client.lastLocalModel = {
     layers: flat.layers,

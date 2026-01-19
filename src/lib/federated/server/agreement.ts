@@ -2,15 +2,19 @@
 // Runs multiple clustering iterations with varying resolution to find stable clusters
 
 import { distancesToAdjacency } from '../clustering/louvain';
-import { getRng } from '../core/random';
+import { getRng, getSeed, SeededRandom } from '../core/random';
+
+// DEBUG: Log RNG state consumption for agreement matrix
+const DEBUG_RNG = true;
 
 /**
  * Louvain partition with configurable resolution parameter
  * @param A Adjacency matrix (weighted)
  * @param resolution Resolution parameter (lower = larger clusters, higher = smaller clusters)
+ * @param rngOverride Optional RNG to use (if not provided, uses global RNG)
  * @returns Partition array (community assignment for each node)
  */
-export const louvainWithResolution = (A: number[][], resolution: number): number[] => {
+export const louvainWithResolution = (A: number[][], resolution: number, rngOverride?: SeededRandom): number[] => {
   const n = A.length;
   if (n === 0) return [];
 
@@ -43,7 +47,8 @@ export const louvainWithResolution = (A: number[][], resolution: number): number
   const maxPasses = 10;
   let pass = 0;
   
-  const rng = getRng();
+  // Use provided RNG or fall back to global
+  const rng = rngOverride || getRng();
   
   while (improvement && pass < maxPasses) {
     improvement = false;
@@ -106,9 +111,10 @@ export const louvainWithResolution = (A: number[][], resolution: number): number
  * @param A Adjacency matrix (weighted)
  * @param resolution Resolution parameter
  * @param maxIterations Maximum number of iterations
+ * @param rngOverride Optional RNG to use (if not provided, uses global RNG)
  * @returns Partition array (community assignment for each node)
  */
-export const leidenWithResolution = (A: number[][], resolution: number, maxIterations: number = 10): number[] => {
+export const leidenWithResolution = (A: number[][], resolution: number, maxIterations: number = 10, rngOverride?: SeededRandom): number[] => {
   const n = A.length;
   if (n === 0) return [];
 
@@ -130,7 +136,8 @@ export const leidenWithResolution = (A: number[][], resolution: number, maxItera
     return partition;
   }
 
-  const rng = getRng();
+  // Use provided RNG or fall back to global
+  const rng = rngOverride || getRng();
   let previousModularity = computeModularityWithResolution(A, partition, resolution);
   let iterations = 0;
 
@@ -331,6 +338,10 @@ const refinePartitionLeiden = (
 
 /**
  * Build agreement matrix by running multiple clusterings with varying resolutions
+ * Uses an ISOLATED RNG to avoid affecting the global simulation RNG state.
+ * This ensures that using agreement matrix vs not using it produces the same results
+ * when clusterings are identical.
+ * 
  * @param D Distance matrix between clients
  * @param clusteringMethod 'louvain' or 'leiden' (defaults to leiden)
  * @param numRuns Number of clustering runs (default: 20)
@@ -354,15 +365,25 @@ export const buildAgreementMatrix = (
   // Initialize agreement matrix
   const agreement: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
 
+  // Create an ISOLATED RNG for agreement matrix computation
+  // This ensures agreement matrix doesn't consume values from the global RNG
+  // and thus doesn't affect subsequent simulation steps
+  const isolatedSeed = getSeed() + 100000; // Use a derived seed to keep reproducibility
+  const isolatedRng = new SeededRandom(isolatedSeed);
+  
+  if (DEBUG_RNG) {
+    console.log(`[AgreementMatrix] Using isolated RNG with seed ${isolatedSeed} for ${numRuns} runs`);
+  }
+
   // Run clustering multiple times with varying resolution
   for (let run = 0; run < numRuns; run++) {
     const resolution = minResolution + (maxResolution - minResolution) * (run / (numRuns - 1));
     
     let partition: number[];
     if (clusteringMethod === 'louvain') {
-      partition = louvainWithResolution(A, resolution);
+      partition = louvainWithResolution(A, resolution, isolatedRng);
     } else {
-      partition = leidenWithResolution(A, resolution);
+      partition = leidenWithResolution(A, resolution, 10, isolatedRng);
     }
 
     // Update agreement matrix: increment if two clients are in same cluster
@@ -373,6 +394,10 @@ export const buildAgreementMatrix = (
         }
       }
     }
+  }
+
+  if (DEBUG_RNG) {
+    console.log(`[AgreementMatrix] Completed ${numRuns} runs, global RNG unchanged`);
   }
 
   return agreement;

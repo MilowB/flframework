@@ -1,7 +1,7 @@
 // Louvain Community Detection Algorithm for Clustered Federated Learning
 // Implements modularity optimization with Leiden-like refinement
 
-import { getRng } from '../core/random';
+import { getRng, SeededRandom } from '../core/random';
 
 // Compute L1 (Manhattan) distance between two vectors
 export const l1Distance = (a: number[], b: number[]): number => {
@@ -290,4 +290,144 @@ export const computeSilhouetteScore = (
   }
   
   return clusterMeans.length > 0 ? clusterMeans.reduce((u, v) => u + v, 0) / clusterMeans.length : undefined;
+};
+
+// Version of louvainPartition that accepts an external RNG (for isolated randomness)
+export const louvainPartitionWithRng = (A: number[][], rng: SeededRandom): number[] => {
+  const n = A.length;
+  if (n === 0) return [];
+
+  // Total weight (each edge counted once)
+  let m = 0;
+  const k = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      k[i] += A[i][j];
+    }
+    m += k[i];
+  }
+  m = m / 2;
+
+  if (m === 0) {
+    const single: number[] = [];
+    for (let i = 0; i < n; i++) single.push(i);
+    return single;
+  }
+
+  const community = new Array(n);
+  for (let i = 0; i < n; i++) community[i] = i;
+  const sumTot = k.slice();
+
+  let improvement = true;
+  const maxPasses = 10;
+  let pass = 0;
+
+  while (improvement && pass < maxPasses) {
+    improvement = false;
+    pass++;
+
+    const nodes = Array.from({ length: n }, (_, i) => i);
+    rng.shuffle(nodes);
+
+    for (const i of nodes) {
+      const oldC = community[i];
+      const neighCommWeights = new Map<number, number>();
+      for (let j = 0; j < n; j++) {
+        if (A[i][j] <= 0) continue;
+        const c = community[j];
+        neighCommWeights.set(c, (neighCommWeights.get(c) || 0) + A[i][j]);
+      }
+
+      sumTot[oldC] -= k[i];
+      let bestC = oldC;
+      let bestDelta = 0;
+      const resolution = 2;
+
+      for (const [c, k_i_in] of neighCommWeights.entries()) {
+        const deltaQ = (k_i_in - resolution * (k[i] * sumTot[c]) / (2 * m)) / (2 * m);
+        if (deltaQ > bestDelta) {
+          bestDelta = deltaQ;
+          bestC = c;
+        }
+      }
+
+      if (bestC !== oldC) {
+        community[i] = bestC;
+        sumTot[bestC] += k[i];
+        improvement = true;
+      } else {
+        sumTot[oldC] += k[i];
+      }
+    }
+  }
+
+  const labelMap = new Map<number, number>();
+  let nextLabel = 0;
+  for (let i = 0; i < n; i++) {
+    const c = community[i];
+    if (!labelMap.has(c)) labelMap.set(c, nextLabel++);
+  }
+  for (let i = 0; i < n; i++) community[i] = labelMap.get(community[i])!;
+
+  return community;
+};
+
+// Version of refinePartition that accepts an external RNG (for isolated randomness)
+// Note: Current refinePartition doesn't use RNG, but we add the parameter for consistency
+export const refinePartitionWithRng = (A: number[][], partition: number[], _rng: SeededRandom): number[] => {
+  const n = A.length;
+  const k = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      k[i] += A[i][j];
+    }
+  }
+
+  const commNodes = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const c = partition[i];
+    if (!commNodes.has(c)) commNodes.set(c, []);
+    commNodes.get(c)!.push(i);
+  }
+
+  for (let i = 0; i < n; i++) {
+    const current = partition[i];
+    let bestC = current;
+    let bestWeight = 0;
+
+    for (let j = 0; j < n; j++) {
+      if (i === j) continue;
+      const c = partition[j];
+      const w = A[i][j];
+      if (w > bestWeight) {
+        bestWeight = w;
+        bestC = c;
+      }
+    }
+
+    if (bestC !== current) {
+      let internal = 0;
+      for (const v of (commNodes.get(current) || [])) internal += A[i][v];
+
+      let candidate = 0;
+      for (const v of (commNodes.get(bestC) || [])) candidate += A[i][v];
+
+      if (candidate > internal) {
+        partition[i] = bestC;
+        commNodes.get(current)!.splice(commNodes.get(current)!.indexOf(i), 1);
+        if (!commNodes.has(bestC)) commNodes.set(bestC, []);
+        commNodes.get(bestC)!.push(i);
+      }
+    }
+  }
+
+  const labelMap = new Map<number, number>();
+  let next = 0;
+  for (let i = 0; i < n; i++) {
+    const c = partition[i];
+    if (!labelMap.has(c)) labelMap.set(c, next++);
+  }
+  for (let i = 0; i < n; i++) partition[i] = labelMap.get(partition[i])!;
+
+  return partition;
 };

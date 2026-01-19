@@ -355,7 +355,6 @@ export function logClientModelDifferences(clientModels: Record<string, MLPWeight
   for (let i = 0; i < ids.length; i++) {
     for (let j = i + 1; j < ids.length; j++) {
       const diff = compareWeights(clientModels[ids[i]], clientModels[ids[j]]);
-      console.log(`Différence totale entre ${ids[i]} et ${ids[j]} : ${diff}`);
     }
   }
 }

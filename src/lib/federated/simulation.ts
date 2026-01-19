@@ -63,6 +63,19 @@ export const initializeModel = (architecture: string): ModelWeights => {
  * @param clustersForRound Clusters from previous round (optional)
  * @returns [RoundMetrics, clustersForRound]
  */
+
+// DEBUG flag for RNG state tracking - set to true to diagnose reproducibility issues
+const DEBUG_RNG_STATE = true;
+
+// Helper to sample RNG state without consuming it (for debugging)
+const sampleRngState = (label: string) => {
+  if (!DEBUG_RNG_STATE) return;
+  const rng = getRng();
+  // Sample the next value to see current state (this does consume one value)
+  const sample = rng.next();
+  console.log(`[RNG Debug] ${label}: next value = ${sample.toFixed(8)}`);
+};
+
 export const runFederatedRound = async (
   // Dictionnaire pour stocker le modèle envoyé à chaque client
   state: FederatedState,
@@ -72,6 +85,12 @@ export const runFederatedRound = async (
   clustersForRound?: string[][]
 ): Promise<[RoundMetrics, string[][] | undefined]> => {
   const { serverConfig, clients, globalModel, currentRound } = state;
+
+  if (DEBUG_RNG_STATE) {
+    console.log(`\n=== Round ${currentRound} START ===`);
+    console.log(`[RNG Debug] Agreement matrix enabled: ${serverConfig.useAgreementMatrix}`);
+    sampleRngState(`Round ${currentRound} - Before client selection`);
+  }
 
   if (!globalModel) {
     throw new Error('Global model not initialized');
@@ -146,7 +165,7 @@ export const runFederatedRound = async (
         const modelToShow = modelsSentToClients[client.id];
         const vec = vectorizeModel(unflattenWeights(modelToShow, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE));
         const pca3d = pca3D_single(vec);
-        console.log(`PCA3D du modèle envoyé au client ${client.id}:`, pca3d);
+        //console.log(`PCA3D du modèle envoyé au client ${client.id}:`, pca3d);
       }
     } catch (e) {
       console.warn('Erreur PCA3D:', e);
@@ -200,33 +219,6 @@ export const runFederatedRound = async (
     const { result, client } = trainedClients[i];
     let weightsToUse = result.weights;
 
-    // @debug HARDCODE DE STRATEGIE GRAVITY
-    /*
-    await new Promise(resolve => setTimeout(resolve, 200));
-    // Gravity: dès le round 5, utiliser le modèle de cluster envoyé par le serveur (sans fine-tuning)
-    if (currentRound >= 3 && client.id === "client-0" && currentRound < 10) {
-      console.log("je suis le client " + client.id);
-      // Affecter le learning rate à 0.05 pour ce client
-      client.learningRate = 0.01;
-      // Affecter le nombre d'epochs à 6 pour ce client
-      client.localEpochs = 6;
-      // On récupère le modèle envoyé au client depuis le dictionnaire
-      if (modelsSentToClients[client.id]) {
-        weightsToUse = modelsSentToClients[client.id];
-        console.log("Le client retourne le modèle reçu sans fine-tuning");
-      } else {
-        // Fallback: on ne peut pas retrouver le modèle envoyé, on garde le modèle local
-        console.log("Le client retourne le modèle fine-tuné");
-        weightsToUse = result.weights;
-      }
-    }
-    else {
-      console.log("Le client retourne le modèle fine-tuné");
-      client.localEpochs = 3;
-      weightsToUse = result.weights;
-    }
-    */
-
     trainedClients[i].result.weights = weightsToUse;
 
     clientResults.push({ weights: weightsToUse, dataSize: client.dataSize });
@@ -253,11 +245,13 @@ export const runFederatedRound = async (
   let agreementMatrixForRound: number[][] | undefined;
 
   try {
-    const clientResultsWithIds = trainedClients.map(({ result, client }) => ({
-      id: client.id,
-      weights: result.weights,
-      dataSize: client.dataSize
-    }));
+    const clientResultsWithIds = trainedClients
+      .map(({ result, client }) => ({
+        id: client.id,
+        weights: result.weights,
+        dataSize: client.dataSize
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)); // Sort by client ID for consistent ordering
 
     const clustering = clusterClientModels(
       clientResultsWithIds,
@@ -269,6 +263,11 @@ export const runFederatedRound = async (
     distanceMatrixForRound = clustering.distanceMatrix;
     clustersForRound = clustering.clusters;
     agreementMatrixForRound = clustering.agreementMatrix;
+
+    if (DEBUG_RNG_STATE) {
+      sampleRngState(`Round ${currentRound} - After clustering (agreement=${serverConfig.useAgreementMatrix})`);
+      console.log(`[RNG Debug] Clusters: ${JSON.stringify(clustersForRound)}`);
+    }
 
     // Compute silhouette
     const idToIndex = new Map<string, number>();

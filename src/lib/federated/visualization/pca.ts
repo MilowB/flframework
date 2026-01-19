@@ -217,10 +217,5 @@ export function computeModelPositions(
     position: p.position.map(c => c * scale) as [number, number, number]
   }));
   
-  console.log('=== Final color assignments ===');
-  result.forEach(p => {
-    console.log(`${p.id} (${p.type}): clusterIdx=${p.clusterIdx}, color=${p.color}`);
-  });
-  
   return result;
 }

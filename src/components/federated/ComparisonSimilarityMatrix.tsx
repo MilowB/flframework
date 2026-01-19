@@ -126,23 +126,11 @@ const SingleMatrix = ({ name, expIdx, roundData }: SingleMatrixProps) => {
     return result;
   }, [D, sigma]);
 
-  // Sort participating client ids
-  const sortedIds = [...participating].sort((a, b) => a.localeCompare(b));
-  const idToIndex = new Map<string, number>();
-  participating.forEach((id, i) => idToIndex.set(id, i));
-
-  // Reorder similarity matrix
-  const Sordered: number[][] = useMemo(() => {
-    const result: number[][] = Array.from({ length: S.length }, () => new Array(S.length).fill(0));
-    for (let i = 0; i < sortedIds.length; i++) {
-      for (let j = 0; j < sortedIds.length; j++) {
-        const oi = idToIndex.get(sortedIds[i]) ?? i;
-        const oj = idToIndex.get(sortedIds[j]) ?? j;
-        result[i][j] = S[oi][oj];
-      }
-    }
-    return result;
-  }, [S, sortedIds, idToIndex]);
+  // Use participating clients in their original order (already sorted in simulation.ts)
+  const sortedIds = participating;
+  
+  // No need to reorder - the distance matrix is already in the correct order
+  const Sordered = S;
 
   const n = Sordered.length;
   const cellSize = n <= 8 ? 20 : (n <= 16 ? 14 : 10);

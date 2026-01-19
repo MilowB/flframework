@@ -21,7 +21,6 @@ export const applyAssignment = (
 ): ModelWeights => {
     // Le numéro du round est accessible ici :
     const round = context.round;
-    console.log(`Stratégie ${method}`);
     switch (method) {
         case '1NN':
             return getModelFor1NN(
@@ -29,7 +28,6 @@ export const applyAssignment = (
                 context.globalModel
             ) || context.globalModel;
         case 'Probabiliste': {
-            console.log("Stratégie Probabiliste", round !== undefined ? `(round ${round})` : '');
             if (round <= 5) {
                 if (!context.selectedClients || !context.clusterClientIds || !context.globalModel || !context.clusterModels) return context.globalModel;
                 const assignments = computeProbabilisticAssignments(
@@ -40,14 +38,11 @@ export const applyAssignment = (
                 );
                 const idx = assignments[client.id];
                 if (typeof idx === 'number' && context.clusterModels[idx]) {
-                    console.log("Retourne le modèle avec le plus de probabilité");
                     return context.clusterModels[idx];
                 }
-                console.log("Retourne modèle global");
                 return context.globalModel;
             }
             else {
-                console.log("Retourne 1NN");
                 return getModelFor1NN(
                     client.id,
                     context.globalModel

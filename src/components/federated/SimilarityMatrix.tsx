@@ -70,20 +70,11 @@ export const SimilarityMatrix = ({ history }: SimilarityMatrixProps) => {
 		group.forEach(id => clusterColorById.set(id, color));
 	});
 
-	// Sort participating client ids ascending so ordering is stable across rounds
-	const sortedIds = [...participating].slice().sort((a, b) => a.localeCompare(b));
-	const idToIndex = new Map<string, number>();
-	participating.forEach((id, i) => idToIndex.set(id, i));
-
-	// Reorder similarity matrix to match sortedIds order
-	const Sordered: number[][] = Array.from({ length: S.length }, () => new Array(S.length).fill(0));
-	for (let i = 0; i < sortedIds.length; i++) {
-		for (let j = 0; j < sortedIds.length; j++) {
-			const oi = idToIndex.get(sortedIds[i]) ?? i;
-			const oj = idToIndex.get(sortedIds[j]) ?? j;
-			Sordered[i][j] = S[oi][oj];
-		}
-	}
+	// Use participating clients in their original order (already sorted in simulation.ts)
+	const sortedIds = participating;
+	
+	// No need to reorder - the distance matrix is already in the correct order
+	const Sordered = S;
 
 	const n = Sordered.length;
 	const cellSize = n <= 8 ? 28 : (n <= 16 ? 20 : 14); // adaptive sizing
