@@ -37,7 +37,7 @@ export const clusterClientModels = (
   clusteringMethod: 'louvain' | 'kmeans' | 'leiden' = 'louvain',
   kmeansNumClusters?: number,
   useAgreementMatrix?: boolean
-) => {
+): { distanceMatrix: number[][]; clusters: string[][]; agreementMatrix?: number[][] } => {
   const validModels: { layers: number[][]; bias: number[] }[] = [];
   const ids: number[] = [];
   for (let i = 0; i < clientResults.length; i++) {
@@ -52,7 +52,7 @@ export const clusterClientModels = (
   }
 
   const D = computeDistanceMatrix(validModels, distanceMetric);
-  if (validModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][] };
+  if (validModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][], agreementMatrix: undefined };
 
   // Get client IDs
   const clientIds = ids.map(i => 
@@ -61,8 +61,8 @@ export const clusterClientModels = (
 
   // Use agreement matrix clustering if enabled (only for Louvain/Leiden)
   if (useAgreementMatrix && (clusteringMethod === 'louvain' || clusteringMethod === 'leiden')) {
-    const { clusters } = computeAgreementClustering(D, clientIds, clusteringMethod);
-    return { distanceMatrix: D, clusters };
+    const { agreementMatrix, clusters } = computeAgreementClustering(D, clientIds, clusteringMethod);
+    return { distanceMatrix: D, clusters, agreementMatrix };
   }
 
   let refined: number[];
@@ -113,5 +113,5 @@ export const clusterClientModels = (
     // Add cluster members in order
     clusters.push(clustersMap.get(communityId)!);
   });
-  return { distanceMatrix: D, clusters };
+  return { distanceMatrix: D, clusters, agreementMatrix: undefined };
 };
