@@ -260,7 +260,8 @@ export const runFederatedRound = async (
       clientResultsWithIds,
       serverConfig.distanceMetric,
       serverConfig.clusteringMethod || 'louvain',
-      serverConfig.kmeansNumClusters
+      serverConfig.kmeansNumClusters,
+      serverConfig.useAgreementMatrix
     );
     distanceMatrixForRound = clustering.distanceMatrix;
     clustersForRound = clustering.clusters;

@@ -51,6 +51,7 @@ export interface ServerConfig {
   distanceMetric?: 'l1' | 'l2' | 'cosine';
   clusteringMethod?: 'louvain' | 'kmeans' | 'leiden';
   kmeansNumClusters?: number; // Number of clusters for K-means (optional, auto-detect if not specified)
+  useAgreementMatrix?: boolean; // Whether to use agreement matrix for consensus clustering
   clientsPerRound: number;
   totalRounds: number;
   minClientsRequired: number;
