@@ -250,6 +250,7 @@ export const runFederatedRound = async (
   let silhouetteAvgForRound: number | undefined;
   let clusterMetricsForRound: ClusterMetrics[] = [];
   let distanceMatrixForRound: number[][] | undefined;
+  let agreementMatrixForRound: number[][] | undefined;
 
   try {
     const clientResultsWithIds = trainedClients.map(({ result, client }) => ({
@@ -262,10 +263,12 @@ export const runFederatedRound = async (
       clientResultsWithIds,
       serverConfig.distanceMetric,
       serverConfig.clusteringMethod || 'louvain',
-      serverConfig.kmeansNumClusters
+      serverConfig.kmeansNumClusters,
+      serverConfig.useAgreementMatrix
     );
     distanceMatrixForRound = clustering.distanceMatrix;
     clustersForRound = clustering.clusters;
+    agreementMatrixForRound = clustering.agreementMatrix;
 
     // Compute silhouette
     const idToIndex = new Map<string, number>();
@@ -345,6 +348,7 @@ export const runFederatedRound = async (
     timestamp: Date.now(),
     weightsSnapshot: computeWeightsSnapshot(newGlobalModel),
     distanceMatrix: distanceMatrixForRound,
+    agreementMatrix: agreementMatrixForRound,
     clusters: clustersForRound,
     silhouetteAvg: silhouetteAvgForRound,
     clusterMetrics: clusterMetricsForRound.length > 0 ? clusterMetricsForRound : undefined,

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
 import { aggregationMethods } from '@/lib/federated/aggregations';
 import { Server, Layers, Users, Hash } from 'lucide-react';
 
@@ -198,6 +199,22 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
               </SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Matrice d'agreement */}
+        <div className="flex items-center space-x-3 pt-2">
+          <Checkbox
+            id="agreement-matrix"
+            checked={config.useAgreementMatrix ?? false}
+            onCheckedChange={(checked) => onConfigChange({ useAgreementMatrix: checked === true })}
+            disabled={disabled}
+          />
+          <Label 
+            htmlFor="agreement-matrix" 
+            className="text-sm text-muted-foreground cursor-pointer"
+          >
+            Matrice d'agreement
+          </Label>
         </div>
       </CardContent>
     </Card>

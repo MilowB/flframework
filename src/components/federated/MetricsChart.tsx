@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { TrendingDown, TrendingUp, Server, Layers, Users, Box } from 'lucide-react';
 import SimilarityMatrix from './SimilarityMatrix';
+import AgreementMatrix from './AgreementMatrix';
 import { ModelVisualization3D } from './ModelVisualization3D';
 import { Model3DPosition } from '@/lib/federated/visualization/pca';
 
@@ -220,6 +221,9 @@ export const MetricsChart = ({ history, clientModels, clusterModels, globalModel
               
               {/* Similarity matrix panel */}
               <SimilarityMatrix history={history} />
+              
+              {/* Agreement matrix panel */}
+              <AgreementMatrix history={history} />
             </TabsContent>
 
             {/* Clusters Tab - All clusters metrics */}

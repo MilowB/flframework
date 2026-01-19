@@ -9,6 +9,7 @@ import { computeDistance, distancesToAdjacency, louvainPartition, refinePartitio
 import { kmeansClustering, determineOptimalK } from './kmeans';
 import { leidenPartition } from './leiden';
 import { clusterModelStore } from '../core/stores';
+import { computeAgreementClustering } from '../server/agreement';
 
 // Compute distance matrix between client models
 export const computeDistanceMatrix = (models: { layers: number[][]; bias: number[] }[], distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine'): number[][] => {
@@ -34,8 +35,9 @@ export const clusterClientModels = (
   clientResults: { id?: string; weights: ModelWeights; dataSize: number }[],
   distanceMetric?: 'l1' | 'l2' | 'cosine',
   clusteringMethod: 'louvain' | 'kmeans' | 'leiden' = 'louvain',
-  kmeansNumClusters?: number
-) => {
+  kmeansNumClusters?: number,
+  useAgreementMatrix?: boolean
+): { distanceMatrix: number[][]; clusters: string[][]; agreementMatrix?: number[][] } => {
   const validModels: { layers: number[][]; bias: number[] }[] = [];
   const ids: number[] = [];
   for (let i = 0; i < clientResults.length; i++) {
@@ -50,7 +52,18 @@ export const clusterClientModels = (
   }
 
   const D = computeDistanceMatrix(validModels, distanceMetric);
-  if (validModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][] };
+  if (validModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][], agreementMatrix: undefined };
+
+  // Get client IDs
+  const clientIds = ids.map(i => 
+    clientResults[i] && clientResults[i].id ? clientResults[i].id! : `client-${i}`
+  );
+
+  // Use agreement matrix clustering if enabled (only for Louvain/Leiden)
+  if (useAgreementMatrix && (clusteringMethod === 'louvain' || clusteringMethod === 'leiden')) {
+    const { agreementMatrix, clusters } = computeAgreementClustering(D, clientIds, clusteringMethod);
+    return { distanceMatrix: D, clusters, agreementMatrix };
+  }
 
   let refined: number[];
 
@@ -100,5 +113,5 @@ export const clusterClientModels = (
     // Add cluster members in order
     clusters.push(clustersMap.get(communityId)!);
   });
-  return { distanceMatrix: D, clusters };
+  return { distanceMatrix: D, clusters, agreementMatrix: undefined };
 };
