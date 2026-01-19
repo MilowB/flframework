@@ -28,6 +28,10 @@ export interface ClientState {
     bias: number[];
     version: number;
   }>;
+  /**
+   * Historique des normes de gradient des derniers rounds
+   */
+  gradientNormHistory?: number[];
   id: string;
   name: string;
   status: 'idle' | 'receiving' | 'training' | 'sending' | 'completed' | 'error' | 'evaluating';

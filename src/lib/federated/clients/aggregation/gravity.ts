@@ -129,67 +129,22 @@ export const applyGravityAggregation = (
     k: number = 0.1, // facteur d'ajustement de la contre-force
     currentRound?: number, // numéro de round courant (optionnel)
     clientId?: string, // identifiant du client (optionnel)
-    globalModel?: MLPWeights // modèle global du serveur (optionnel)
+    globalModel?: MLPWeights, // modèle global du serveur (optionnel)
+    gradientNormHistory?: number[] // historique des normes de gradient (optionnel)
 ): MLPWeights => {
     // Si pas de modèle local précédent, on retourne le modèle reçu
     if (!previousLocalModel) {
         return receivedModel;
     }
 
-    // Constantes physiques
-    const G = 9.8;
-    const m_centroid = 10e3;
-    const m_client = 1;
-    // Calcul de la distance L2 entre les deux modèles (N)
-    const distance = l2DistanceMLP(receivedModel, previousLocalModel);
-    // const sumWeightsNorm = normMLPWeights(sumWeights);
+    // Si augmentation significative du gradient détectée, utiliser le modèle global
+    if (detectGradientIncrease(gradientNormHistory) && globalModel) {
+        console.log(`Client ${clientId}: Gradient increase detected, using global model`);
+        receivedModel = globalModel;
+    }
+
     let w = 1;
-    if (distance > 0) {
-        const epsilon = 1e-8;
-        // Force gravitationnelle réelle (G=9.8, m1=100, m2=1)
-        const F = G * m_centroid * m_client / (distance * distance + epsilon);
-        // Force max pour distance nulle
-        const Fmax = G * m_centroid * m_client;
-        // Pondération normalisée entre 0 et 1
-        //w = F / Fmax;
-        //w = Math.max(0, Math.min(1, w));
-    }
-
-    /*
-    if (clientId === "client-0") {
-        if (currentRound < 3) {
-            w = 1;
-        }
-        else if (currentRound >= 10) {
-            if (currentRound <= 11) {
-                receivedModel = globalModel;
-            }
-            w = 1;
-        }
-        else {
-            w = 0;
-        }
-    }
-    else {
-        w = 1;
-    }
-    */
-
-    if (clientId === "client-0") {
-        if (currentRound < 3) {
-            w = 1;
-        }
-        else if (currentRound >= 6) {
-            if (currentRound <= 6) {
-                receivedModel = globalModel;
-            }
-            w = 1;
-        }
-    }
-    else {
-        w = 1;
-    }
-
+    
     // Création d'une copie pour ne pas muter l'original
     const result = cloneWeights(receivedModel);
 
@@ -216,3 +171,55 @@ export const applyGravityAggregation = (
 
     return result;
 };
+
+/**
+ * Détecte si le gradient a augmenté de manière significative (>= 120% du round précédent).
+ * @param gradientNormHistory Historique des normes de gradient (index 0 = plus récent)
+ * @returns true si augmentation détectée, false sinon
+ */
+export const detectGradientIncrease = (
+    gradientNormHistory: number[] | undefined
+): boolean => {
+    // Si pas d'historique ou moins de 2 entrées, pas d'augmentation détectée
+    if (!gradientNormHistory || gradientNormHistory.length < 2) {
+        return false;
+    }
+
+    const normN1 = gradientNormHistory[0]; // Most recent (N-1)
+    const normN2 = gradientNormHistory[1]; // Second most recent (N-2)
+    
+    // Si la norme a augmenté de 20% ou plus
+    return normN1 >= normN2 * 1.2;
+};
+
+/**
+ * Calcule le nombre d'epochs ajusté en fonction de l'historique des normes de gradient.
+ * Si la norme au round N-1 était >= 120% de la norme au round N-2, double les epochs.
+ * @param gradientNormHistory Historique des normes de gradient (index 0 = plus récent)
+ * @param baseEpochs Nombre d'epochs de base
+ * @param clientId Identifiant du client pour le logging
+ * @returns Le nombre d'epochs ajusté
+ */
+export const computeAdaptiveEpochs = (
+    gradientNormHistory: number[] | undefined,
+    baseEpochs: number,
+    clientId: string
+): number => {
+    // Si pas d'historique ou moins de 2 entrées, retourner le nombre d'epochs de base
+    if (!gradientNormHistory || gradientNormHistory.length < 2) {
+        return baseEpochs;
+    }
+
+    const normN1 = gradientNormHistory[0]; // Most recent (N-1)
+    const normN2 = gradientNormHistory[1]; // Second most recent (N-2)
+    
+    // Si la norme a augmenté de 20% ou plus, doubler les epochs
+    if (normN1 >= normN2 * 1.2) {
+        const adjustedEpochs = baseEpochs * 2;
+        console.log(`Client ${clientId}: Gradient norm increased by ${((normN1/normN2 - 1) * 100).toFixed(1)}% (${normN2.toFixed(4)} → ${normN1.toFixed(4)}), doubling epochs to ${adjustedEpochs}`);
+        return adjustedEpochs;
+    }
+
+    return baseEpochs;
+};
+

@@ -1,7 +1,7 @@
 // Client Aggregation Strategies
 export { applyNoneAggregation } from './none';
 export { applyFiftyFiftyAggregation } from './fiftyFifty';
-export { applyGravityAggregation } from './gravity';
+export { applyGravityAggregation, computeAdaptiveEpochs, detectGradientIncrease } from './gravity';
 
 import type { MLPWeights } from '../../models/mlp';
 import { applyNoneAggregation } from './none';
@@ -26,11 +26,12 @@ export const applyClientAggregation = (
   }>,
   currentRound?: number,
   clientId?: string,
-  globalModel?: MLPWeights
+  globalModel?: MLPWeights,
+  gradientNormHistory?: number[]
 ): MLPWeights => {
   switch (method) {
     case 'gravity':
-      return applyGravityAggregation(receivedModel, previousLocalModel, localModelHistory, receivedModelHistory, 0.1, currentRound, clientId, globalModel);
+      return applyGravityAggregation(receivedModel, previousLocalModel, localModelHistory, receivedModelHistory, 0.1, currentRound, clientId, globalModel, gradientNormHistory);
     case '50-50':
       return applyFiftyFiftyAggregation(receivedModel, previousLocalModel);
     case 'none':

@@ -23,7 +23,7 @@ import {
   MNIST_OUTPUT_SIZE
 } from '../models/mlp';
 import { loadMNISTTrain, getClientDataSubset, oneHot } from '../data/mnist';
-import { applyClientAggregation } from './aggregation';
+import { applyClientAggregation, computeAdaptiveEpochs } from './aggregation';
 
 // Generate client-specific test data that mimics training distribution
 export const generateClientTestData = (clientId: string, trainDataSize: number): void => {
@@ -128,6 +128,11 @@ export const simulateClientTraining = async (
   console.log(`Traitement du client ${client.id}`);
   const aggregationMethod = client.clientAggregationMethod || 'none';
   
+  // Initialize gradient norm history if not exists
+  if (!Array.isArray(client.gradientNormHistory)) {
+    client.gradientNormHistory = [];
+  }
+  
   // Convertir le modèle global en format MLP si disponible
   const globalMLP = globalModelFromServer
     ? unflattenWeights(
@@ -136,7 +141,7 @@ export const simulateClientTraining = async (
       )
     : undefined;
   
-  const startingModel = applyClientAggregation(aggregationMethod, receivedMLP, previousLocalMLP, client.localModelHistory, client.receivedModelHistory, currentRound, client.id, globalMLP);
+  const startingModel = applyClientAggregation(aggregationMethod, receivedMLP, previousLocalMLP, client.localModelHistory, client.receivedModelHistory, currentRound, client.id, globalMLP, client.gradientNormHistory);
 
   // Clone weights for local training - keep a copy of the model before training for gradient norm
   const modelBeforeTraining = cloneWeights(startingModel);
@@ -156,7 +161,13 @@ export const simulateClientTraining = async (
 
   // Training configuration for MNIST
   // Utilise le nombre d'epochs du client s'il est défini, sinon 3 par défaut
-  const localEpochs = client.localEpochs !== undefined ? client.localEpochs : 3;
+  let localEpochs = client.localEpochs !== undefined ? client.localEpochs : 3;
+  
+  // Apply adaptive epochs only for clients using gravity aggregation
+  if (aggregationMethod === 'gravity') {
+    localEpochs = computeAdaptiveEpochs(client.gradientNormHistory, localEpochs, client.id);
+  }
+  
   // Utilise le learning rate du client s'il est défini, sinon 0.01 par défaut
   const learningRate = client.learningRate !== undefined ? client.learningRate : 0.01;
 
@@ -181,6 +192,13 @@ export const simulateClientTraining = async (
 
   // Compute gradient norm (L2 norm of weight changes during training)
   const gradientNorm = computeGradientNorm(modelBeforeTraining, localMLP);
+
+  // Save gradient norm to history (keep most recent at index 0)
+  client.gradientNormHistory.unshift(gradientNorm);
+  // Keep only the last 3 gradient norms
+  if (client.gradientNormHistory.length > 3) {
+    client.gradientNormHistory.length = 3;
+  }
 
   // Convert back to flat format
   const flat = flattenWeights(localMLP);
@@ -262,5 +280,6 @@ export const createClient = (index: number): ClientState => {
     roundsParticipated: 0,
     localModelHistory: [],
     receivedModelHistory: [],
+    gradientNormHistory: [],
   };
 };

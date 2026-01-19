@@ -72,7 +72,7 @@ export const ClientSettingsPanel = ({ config, onConfigChange, disabled }: Client
                 <span className="font-medium">50/50</span>
               </SelectItem>
               <SelectItem value="gravity">
-                <span className="font-medium">Gravité</span>
+                <span className="font-medium">Norme du gradient</span>
               </SelectItem>
             </SelectContent>
           </Select>
