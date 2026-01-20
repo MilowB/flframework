@@ -4,8 +4,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Database, BarChart3 } from 'lucide-react';
 
-export type DatasetType = 'mnist' | 'fashion-mnist' | 'cifar10';
-export type DistributionType = '70-30' | 'iid' | 'non-iid-extreme' | 'dirichlet';
+export type DatasetType = 'mnist';
+export type DistributionType = '70-30';
 
 interface DatasetPanelProps {
   dataset: DatasetType;
@@ -17,15 +17,10 @@ interface DatasetPanelProps {
 
 const datasetOptions: { value: DatasetType; label: string; description: string }[] = [
   { value: 'mnist', label: 'MNIST', description: 'Chiffres manuscrits (0-9)' },
-  { value: 'fashion-mnist', label: 'Fashion-MNIST', description: 'Vêtements (10 classes)' },
-  { value: 'cifar10', label: 'CIFAR-10', description: 'Images couleur (10 classes)' },
 ];
 
 const distributionOptions: { value: DistributionType; label: string; description: string }[] = [
   { value: '70-30', label: '70/30', description: '70% classe principale, 30% autres' },
-  { value: 'iid', label: 'IID', description: 'Distribution uniforme identique' },
-  { value: 'non-iid-extreme', label: 'Non-IID Extrême', description: 'Une seule classe par client' },
-  { value: 'dirichlet', label: 'Dirichlet', description: 'Distribution selon loi de Dirichlet' },
 ];
 
 const DatasetPanel: React.FC<DatasetPanelProps> = ({
