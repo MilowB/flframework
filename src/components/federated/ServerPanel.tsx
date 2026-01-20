@@ -17,10 +17,6 @@ interface ServerPanelProps {
 
 const architectures = [
   { value: 'mlp-small', label: 'MLP Small (784→128→10)' },
-  { value: 'mlp-medium', label: 'MLP Medium (784→256→128→10)' },
-  { value: 'mlp-large', label: 'MLP Large (784→512→256→128→10)' },
-  { value: 'cnn-simple', label: 'CNN Simple (32→64→128→10)' },
-  { value: 'resnet-mini', label: 'ResNet Mini (64→128→256→512→10)' },
 ];
 
 export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersion }: ServerPanelProps) => {
