@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useFederatedLearning } from '@/hooks/useFederatedLearning';
 import { ServerPanel } from '@/components/federated/ServerPanel';
 import { ClientSettingsPanel } from '@/components/federated/ClientSettingsPanel';
@@ -19,14 +19,17 @@ import GravityPanel from '@/components/federated/GravityPanel';
 import NonePanel from '@/components/federated/NonePanel';
 import FiftyFiftyPanel from '@/components/federated/FiftyFiftyPanel';
 import KmeansPanel from '@/components/federated/KmeansPanel';
+import DatasetPanel, { DatasetType, DistributionType } from '@/components/federated/DatasetPanel';
 
 
 const IndexContent = () => {
   const { gravity, setGravity } = useStrategyHyperparams();
   // Ajout des états locaux pour les autres stratégies dynamiques
-  const [none, setNone] = React.useState({ dynamicData: false });
-  const [fiftyFifty, setFiftyFifty] = React.useState({ dynamicData: false });
-  const [kmeans, setKmeans] = React.useState({ numClusters: 3 });
+  const [none, setNone] = useState({ dynamicData: false });
+  const [fiftyFifty, setFiftyFifty] = useState({ dynamicData: false });
+  const [kmeans, setKmeans] = useState({ numClusters: 3 });
+  const [dataset, setDataset] = useState<DatasetType>('mnist');
+  const [distribution, setDistribution] = useState<DistributionType>('70-30');
   const {
     state,
     mnistLoaded,
@@ -39,8 +42,8 @@ const IndexContent = () => {
     updateServerConfig,
     loadExperiment,
   } = useFederatedLearning(6, gravity, none, fiftyFifty);
-  const [gravityCollapsed, setGravityCollapsed] = React.useState(false);
-  const [kmeansCollapsed, setKmeansCollapsed] = React.useState(false);
+  const [gravityCollapsed, setGravityCollapsed] = useState(false);
+  const [kmeansCollapsed, setKmeansCollapsed] = useState(false);
 
   // Compute 3D positions for saving (only if not loaded from file)
   const visualizations3D = useMemo(() => {
@@ -114,6 +117,15 @@ const IndexContent = () => {
           onStop={stopTraining}
           onReset={resetTraining}
           onSeedChange={handleSeedChange}
+        />
+
+        {/* Dataset Panel - Full Width */}
+        <DatasetPanel
+          dataset={dataset}
+          distribution={distribution}
+          onDatasetChange={setDataset}
+          onDistributionChange={setDistribution}
+          disabled={state.isRunning}
         />
 
         {/* Main Grid - 3 columns */}
