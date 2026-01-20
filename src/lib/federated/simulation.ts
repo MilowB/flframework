@@ -251,7 +251,12 @@ export const runFederatedRound = async (
         weights: result.weights,
         dataSize: client.dataSize
       }))
-      .sort((a, b) => a.id.localeCompare(b.id)); // Sort by client ID for consistent ordering
+      .sort((a, b) => {
+        // Extract numeric index from client ID (e.g., "client-5" -> 5)
+        const numA = parseInt(a.id.split('-')[1] || '0', 10);
+        const numB = parseInt(b.id.split('-')[1] || '0', 10);
+        return numA - numB;
+      }); // Sort by numeric client index for consistent ordering
 
     const clustering = clusterClientModels(
       clientResultsWithIds,
