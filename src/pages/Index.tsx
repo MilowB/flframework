@@ -49,10 +49,11 @@ const IndexContent = () => {
     return compute3DPositions(state.roundHistory);
   }, [state.roundHistory, loadedVisualizations3D]);
 
-  // Determine if gravity strategy is selected
-  const isNone = state.serverConfig?.clientAggregationMethod === 'none';
-  const isFiftyFifty = state.serverConfig?.clientAggregationMethod === '50-50';
-  const isGravity = state.serverConfig?.clientAggregationMethod === 'gravity';
+  // Determine if gravity strategy is selected (default to 'none' if not set)
+  const clientAggMethod = state.serverConfig?.clientAggregationMethod || 'none';
+  const isNone = clientAggMethod === 'none';
+  const isFiftyFifty = clientAggMethod === '50-50';
+  const isGravity = clientAggMethod === 'gravity';
   const isKmeans = state.serverConfig?.clusteringMethod === 'kmeans';
 
   // Sync kmeans numClusters with serverConfig

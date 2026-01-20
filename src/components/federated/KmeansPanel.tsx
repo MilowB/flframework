@@ -25,7 +25,7 @@ export const KmeansPanel: React.FC<KmeansPanelProps> = ({ value, onChange, colla
   };
 
   return (
-    <Card className="mb-4 mx-auto max-w-xl border-primary/40">
+    <Card className="mb-4 w-full border-primary/40">
       <CardHeader className="flex flex-row items-center justify-between cursor-pointer select-none" onClick={onCollapseToggle}>
         <CardTitle className="text-base flex items-center gap-2">
           K-means Clustering – Hyperparamètres

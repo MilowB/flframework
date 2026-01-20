@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const defaultServerConfig: ServerConfig = {
   aggregationMethod: 'fedavg',
+  clientAggregationMethod: 'none',
   clientsPerRound: 6,
   totalRounds: 5,
   minClientsRequired: 2,
@@ -105,8 +106,28 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
   }, []);
 
   const startTraining = useCallback(async () => {
-    if (!state.globalModel) {
-      initializeTraining();
+    // Initialize model synchronously if not present
+    let currentGlobalModel = state.globalModel;
+    if (!currentGlobalModel) {
+      setSeed(state.serverConfig.seed ?? 42);
+      currentGlobalModel = initializeModel(state.serverConfig.modelArchitecture);
+      const newClients = Array.from({ length: state.clients.length }, (_, i) => createClient(i));
+      setState(prev => ({
+        ...prev,
+        globalModel: currentGlobalModel,
+        currentRound: 0,
+        roundHistory: [],
+        clients: newClients.map(c => ({
+          ...c,
+          status: 'idle' as const,
+          progress: 0,
+          localLoss: 0,
+          localAccuracy: 0,
+          roundsParticipated: 0,
+        })),
+      }));
+      // Wait for state to update
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     abortRef.current = false;
@@ -116,7 +137,7 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
     // updated by previous rounds are preserved.
     const startingState = stateRef.current.globalModel ? stateRef.current : {
       ...stateRef.current,
-      globalModel: initializeModel(stateRef.current.serverConfig.modelArchitecture),
+      globalModel: currentGlobalModel,
     };
 
     let clustersForRound: string[][] | undefined = undefined;
