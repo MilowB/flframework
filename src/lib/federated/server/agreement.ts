@@ -5,7 +5,7 @@ import { distancesToAdjacency } from '../clustering/louvain';
 import { getRng, getSeed, SeededRandom } from '../core/random';
 
 // DEBUG: Log RNG state consumption for agreement matrix
-const DEBUG_RNG = true;
+const DEBUG_RNG = false;
 
 /**
  * Louvain partition with configurable resolution parameter

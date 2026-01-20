@@ -102,6 +102,7 @@ export const clusterClientModels = (
   } else {
     // Louvain clustering (default)
     const A = distancesToAdjacency(D);
+    //const partition = louvainPartitionWithRng(A, isolatedRng);
     const partition = louvainPartitionWithRng(A, isolatedRng);
     refined = refinePartitionWithRng(A, partition.slice(), isolatedRng);
   }

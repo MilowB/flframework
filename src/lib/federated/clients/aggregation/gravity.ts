@@ -75,6 +75,43 @@ import {
     MNIST_OUTPUT_SIZE
 } from '../../models/mlp';
 
+// Calcule la similarité cosinus entre deux modèles MLP
+function computeCosineSimilarity(a: MLPWeights, b: MLPWeights): number {
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    // W1
+    for (let i = 0; i < a.W1.length; i++) {
+        for (let j = 0; j < a.W1[i].length; j++) {
+            dotProduct += a.W1[i][j] * b.W1[i][j];
+            normA += a.W1[i][j] * a.W1[i][j];
+            normB += b.W1[i][j] * b.W1[i][j];
+        }
+    }
+    // W2
+    for (let i = 0; i < a.W2.length; i++) {
+        for (let j = 0; j < a.W2[i].length; j++) {
+            dotProduct += a.W2[i][j] * b.W2[i][j];
+            normA += a.W2[i][j] * a.W2[i][j];
+            normB += b.W2[i][j] * b.W2[i][j];
+        }
+    }
+    // b1
+    for (let i = 0; i < a.b1.length; i++) {
+        dotProduct += a.b1[i] * b.b1[i];
+        normA += a.b1[i] * a.b1[i];
+        normB += b.b1[i] * b.b1[i];
+    }
+    // b2
+    for (let i = 0; i < a.b2.length; i++) {
+        dotProduct += a.b2[i] * b.b2[i];
+        normA += a.b2[i] * a.b2[i];
+        normB += b.b2[i] * b.b2[i];
+    }
+
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
 
 // Calcule la distance L2 entre deux modèles MLP
 function l2DistanceMLP(a: MLPWeights, b: MLPWeights): number {
@@ -132,7 +169,6 @@ export const applyGravityAggregation = (
     globalModel?: MLPWeights, // modèle global du serveur (optionnel)
     gradientNormHistory?: number[] // historique des normes de gradient (optionnel)
 ): MLPWeights => {
-    // Si pas de modèle local précédent, on retourne le modèle reçu
     if (!previousLocalModel) {
         return receivedModel;
     }
@@ -143,30 +179,28 @@ export const applyGravityAggregation = (
         receivedModel = globalModel;
     }
 
-    let w = 1;
-    
     // Création d'une copie pour ne pas muter l'original
     const result = cloneWeights(receivedModel);
 
     // Pondération W1
     for (let i = 0; i < result.W1.length; i++) {
         for (let j = 0; j < result.W1[i].length; j++) {
-            result.W1[i][j] = w * receivedModel.W1[i][j] + (1 - w) * previousLocalModel.W1[i][j];
+            result.W1[i][j] = receivedModel.W1[i][j];
         }
     }
     // Pondération W2
     for (let i = 0; i < result.W2.length; i++) {
         for (let j = 0; j < result.W2[i].length; j++) {
-            result.W2[i][j] = w * receivedModel.W2[i][j] + (1 - w) * previousLocalModel.W2[i][j];
+            result.W2[i][j] = receivedModel.W2[i][j];
         }
     }
     // Pondération b1
     for (let i = 0; i < result.b1.length; i++) {
-        result.b1[i] = w * receivedModel.b1[i] + (1 - w) * previousLocalModel.b1[i];
+        result.b1[i] = receivedModel.b1[i];
     }
     // Pondération b2
     for (let i = 0; i < result.b2.length; i++) {
-        result.b2[i] = w * receivedModel.b2[i] + (1 - w) * previousLocalModel.b2[i];
+        result.b2[i] = receivedModel.b2[i];
     }
 
     return result;
@@ -215,7 +249,7 @@ export const computeAdaptiveEpochs = (
     
     // Si la norme a augmenté de 20% ou plus, doubler les epochs
     if (normN1 >= normN2 * 1.2) {
-        const adjustedEpochs = baseEpochs * 2;
+        const adjustedEpochs = baseEpochs * 10;
         console.log(`Client ${clientId}: Gradient norm increased by ${((normN1/normN2 - 1) * 100).toFixed(1)}% (${normN2.toFixed(4)} → ${normN1.toFixed(4)}), doubling epochs to ${adjustedEpochs}`);
         return adjustedEpochs;
     }

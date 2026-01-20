@@ -65,7 +65,7 @@ export const initializeModel = (architecture: string): ModelWeights => {
  */
 
 // DEBUG flag for RNG state tracking - set to true to diagnose reproducibility issues
-const DEBUG_RNG_STATE = true;
+const DEBUG_RNG_STATE = false;
 
 // Helper to sample RNG state without consuming it (for debugging)
 const sampleRngState = (label: string) => {
