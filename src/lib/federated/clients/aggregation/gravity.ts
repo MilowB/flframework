@@ -249,7 +249,7 @@ export const computeAdaptiveEpochs = (
     
     // Si la norme a augmenté de 20% ou plus, doubler les epochs
     if (normN1 >= normN2 * 1.2) {
-        const adjustedEpochs = baseEpochs * 10;
+        const adjustedEpochs = baseEpochs * 2;
         console.log(`Client ${clientId}: Gradient norm increased by ${((normN1/normN2 - 1) * 100).toFixed(1)}% (${normN2.toFixed(4)} → ${normN1.toFixed(4)}), doubling epochs to ${adjustedEpochs}`);
         return adjustedEpochs;
     }

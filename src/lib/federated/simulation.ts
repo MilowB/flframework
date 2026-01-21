@@ -280,25 +280,25 @@ export const runFederatedRound = async (
 
     // Determine clustering method and parameters for this round
     let effectiveClusteringMethod = serverConfig.clusteringMethod || 'louvain';
-    let effectiveKmeansNumClusters = serverConfig.kmeansNumClusters;
+    let effectiveNumClusters = serverConfig.kmeansNumClusters;
     let referenceModelForClustering: ModelWeights | undefined = undefined;
     
-    // If forced to use K-means this round (due to gradient increase in previous round)
-    if (state.forceKmeansNextRound) {
-      effectiveClusteringMethod = 'kmeans';
-      effectiveKmeansNumClusters = state.forceKmeansNextRound.numClusters;
+    // If forced to use Spectral clustering this round (due to gradient increase in previous round)
+    if (state.forceSpectralNextRound) {
+      effectiveClusteringMethod = 'spectral';
+      effectiveNumClusters = state.forceSpectralNextRound.numClusters;
       // Use global model as reference for cosine similarity (compare gradients instead of absolute positions)
       referenceModelForClustering = globalModel;
-      console.log(`[Round ${currentRound}] Forcing K-means with ${effectiveKmeansNumClusters} clusters and global model as reference due to gradient increase in previous round`);
+      console.log(`[Round ${currentRound}] Forcing Spectral clustering with ${effectiveNumClusters} clusters and global model as reference due to gradient increase in previous round`);
       // Reset the flag after using it
-      onStateUpdate({ forceKmeansNextRound: undefined });
+      onStateUpdate({ forceSpectralNextRound: undefined });
     }
 
     const clustering = clusterClientModels(
       clientResultsWithIds,
       serverConfig.distanceMetric,
       effectiveClusteringMethod,
-      effectiveKmeansNumClusters,
+      effectiveNumClusters,
       serverConfig.useAgreementMatrix,
       referenceModelForClustering
     );
@@ -306,11 +306,11 @@ export const runFederatedRound = async (
     clustersForRound = clustering.clusters;
     agreementMatrixForRound = clustering.agreementMatrix;
 
-    // If gradient increase detected this round, force K-means for next round
+    // If gradient increase detected this round, force Spectral clustering for next round
     if (gradientIncreaseDetected && clustersForRound && clustersForRound.length > 0) {
       const numClustersDetected = clustersForRound.length;
-      console.log(`[Round ${currentRound}] Setting K-means for next round with ${numClustersDetected} clusters`);
-      onStateUpdate({ forceKmeansNextRound: { numClusters: numClustersDetected } });
+      console.log(`[Round ${currentRound}] Setting Spectral clustering for next round with ${numClustersDetected} clusters`);
+      onStateUpdate({ forceSpectralNextRound: { numClusters: numClustersDetected } });
     }
 
     if (DEBUG_RNG_STATE) {
