@@ -16,17 +16,29 @@ import { getSeed, SeededRandom } from '../core/random';
 const DEBUG_CLUSTERING_RNG = false;
 
 // Compute distance matrix between client models
-export const computeDistanceMatrix = (models: { layers: number[][]; bias: number[] }[], distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine'): number[][] => {
+// If referenceModel is provided, computes distances relative to that model (for gradient-based similarity)
+export const computeDistanceMatrix = (
+  models: { layers: number[][]; bias: number[] }[], 
+  distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine',
+  referenceModel?: { layers: number[][]; bias: number[] }
+): number[][] => {
   const n = models.length;
   const vecs = models.map(m => {
     const mlp = modelWeightsToMLPWeights(m);
     return vectorizeModel(mlp);
   });
   
+  // Vectorize reference model if provided
+  let referenceVec: number[] | undefined;
+  if (referenceModel) {
+    const refMlp = modelWeightsToMLPWeights(referenceModel);
+    referenceVec = vectorizeModel(refMlp);
+  }
+  
   const D: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const d = computeDistance(vecs[i], vecs[j], distanceMetric);
+      const d = computeDistance(vecs[i], vecs[j], distanceMetric, referenceVec);
       D[i][j] = d;
       D[j][i] = d;
     }
@@ -40,7 +52,8 @@ export const clusterClientModels = (
   distanceMetric?: 'l1' | 'l2' | 'cosine',
   clusteringMethod: 'louvain' | 'kmeans' | 'leiden' = 'louvain',
   kmeansNumClusters?: number,
-  useAgreementMatrix?: boolean
+  useAgreementMatrix?: boolean,
+  referenceModel?: ModelWeights
 ): { distanceMatrix: number[][]; clusters: string[][]; agreementMatrix?: number[][] } => {
   const validModels: { layers: number[][]; bias: number[] }[] = [];
   const ids: number[] = [];
@@ -55,7 +68,7 @@ export const clusterClientModels = (
     }
   }
 
-  const D = computeDistanceMatrix(validModels, distanceMetric);
+  const D = computeDistanceMatrix(validModels, distanceMetric, referenceModel);
   if (validModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][], agreementMatrix: undefined };
 
   // Get client IDs
@@ -87,6 +100,13 @@ export const clusterClientModels = (
       return vectorizeModel(mlp);
     });
     
+    // Vectorize reference model if provided (for gradient-based cosine similarity)
+    let referenceVec: number[] | undefined;
+    if (referenceModel) {
+      const refMlp = modelWeightsToMLPWeights(referenceModel);
+      referenceVec = vectorizeModel(refMlp);
+    }
+    
     // Use specified k or determine optimal k automatically
     let k: number;
     if (kmeansNumClusters && kmeansNumClusters > 0) {
@@ -94,7 +114,8 @@ export const clusterClientModels = (
     } else {
       k = Math.min(determineOptimalK(vecs, distanceMetric, 5), validModels.length);
     }
-    refined = kmeansClusteringWithRng(vecs, k, distanceMetric, isolatedRng);
+    // Pass reference vector to K-means for gradient-based cosine similarity
+    refined = kmeansClusteringWithRng(vecs, k, distanceMetric, isolatedRng, 100, referenceVec);
   } else if (clusteringMethod === 'leiden') {
     // Leiden clustering
     const A = distancesToAdjacency(D);
