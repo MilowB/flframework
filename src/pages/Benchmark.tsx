@@ -70,11 +70,14 @@ interface BenchmarkExperiment {
 }
 
 const architectures = [
-  { value: 'mlp-small', label: 'MLP Small' },
-  { value: 'mlp-medium', label: 'MLP Medium' },
-  { value: 'mlp-large', label: 'MLP Large' },
-  { value: 'cnn-simple', label: 'CNN Simple' },
-  { value: 'resnet-mini', label: 'ResNet Mini' },
+  { value: 'mlp-small', label: 'MLP Small (784→128→10)' },
+];
+
+const clusteringMethods = [
+  { value: 'louvain', label: 'Louvain' },
+  { value: 'kmeans', label: 'K-means' },
+  { value: 'leiden', label: 'Leiden' },
+  { value: 'spectral', label: 'Spectral' },
 ];
 
 const defaultConfig: ServerConfig = {
@@ -750,6 +753,52 @@ const ExperimentPanel = ({
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Clustering Method */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Méthode de clustering</Label>
+                <Select
+                  value={config.clusteringMethod ?? 'louvain'}
+                  onValueChange={(value: 'louvain' | 'kmeans' | 'leiden' | 'spectral') =>
+                    onUpdateConfig({ clusteringMethod: value })
+                  }
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="bg-muted/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clusteringMethods.map((method) => (
+                      <SelectItem key={method.value} value={method.value}>
+                        {method.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* K-means / Spectral Number of Clusters */}
+              {(config.clusteringMethod === 'kmeans' || config.clusteringMethod === 'spectral') && (
+                <div className="space-y-2">
+                  <Label className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>Nb clusters (K)</span>
+                    <span className="font-mono text-primary">{config.clusteringMethod === 'kmeans' ? (config.kmeansNumClusters ?? 3) : (config.spectralNumClusters ?? 3)}</span>
+                  </Label>
+                  <Slider
+                    value={[config.clusteringMethod === 'kmeans' ? (config.kmeansNumClusters ?? 3) : (config.spectralNumClusters ?? 3)]}
+                    onValueChange={([value]) => onUpdateConfig(
+                      config.clusteringMethod === 'kmeans' 
+                        ? { kmeansNumClusters: value } 
+                        : { spectralNumClusters: value }
+                    )}
+                    min={2}
+                    max={10}
+                    step={1}
+                    disabled={disabled}
+                    className="[&_[role=slider]]:bg-primary"
+                  />
+                </div>
+              )}
 
               {/* Total Rounds */}
               <div className="space-y-2">
