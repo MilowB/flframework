@@ -19,6 +19,7 @@ import GravityPanel from '@/components/federated/GravityPanel';
 import NonePanel from '@/components/federated/NonePanel';
 import FiftyFiftyPanel from '@/components/federated/FiftyFiftyPanel';
 import KmeansPanel from '@/components/federated/KmeansPanel';
+import SpectralPanel from '@/components/federated/SpectralPanel';
 import DatasetPanel, { DatasetType, DistributionType } from '@/components/federated/DatasetPanel';
 
 
@@ -28,6 +29,7 @@ const IndexContent = () => {
   const [none, setNone] = useState({ dynamicData: false });
   const [fiftyFifty, setFiftyFifty] = useState({ dynamicData: false });
   const [kmeans, setKmeans] = useState({ numClusters: 3 });
+  const [spectral, setSpectral] = useState({ numClusters: 3 });
   const [dataset, setDataset] = useState<DatasetType>('mnist');
   const [distribution, setDistribution] = useState<DistributionType>('70-30');
   const {
@@ -44,6 +46,7 @@ const IndexContent = () => {
   } = useFederatedLearning(6, gravity, none, fiftyFifty);
   const [gravityCollapsed, setGravityCollapsed] = useState(false);
   const [kmeansCollapsed, setKmeansCollapsed] = useState(false);
+  const [spectralCollapsed, setSpectralCollapsed] = useState(false);
 
   // Compute 3D positions for saving (only if not loaded from file)
   const visualizations3D = useMemo(() => {
@@ -58,6 +61,7 @@ const IndexContent = () => {
   const isFiftyFifty = clientAggMethod === '50-50';
   const isGravity = clientAggMethod === 'gravity';
   const isKmeans = state.serverConfig?.clusteringMethod === 'kmeans';
+  const isSpectral = state.serverConfig?.clusteringMethod === 'spectral';
 
   // Sync kmeans numClusters with serverConfig
   React.useEffect(() => {
@@ -65,6 +69,13 @@ const IndexContent = () => {
       updateServerConfig({ kmeansNumClusters: kmeans.numClusters });
     }
   }, [kmeans.numClusters, isKmeans]);
+
+  // Sync spectral numClusters with serverConfig
+  React.useEffect(() => {
+    if (isSpectral && spectral.numClusters !== state.serverConfig?.spectralNumClusters) {
+      updateServerConfig({ spectralNumClusters: spectral.numClusters });
+    }
+  }, [spectral.numClusters, isSpectral]);
 
   // Handle client count change from ServerPanel
   const handleClientCountChange = (count: number) => {
@@ -179,6 +190,14 @@ const IndexContent = () => {
                 onChange={setKmeans}
                 collapsed={kmeansCollapsed}
                 onCollapseToggle={() => setKmeansCollapsed((c) => !c)}
+              />
+            )}
+            {isSpectral && (
+              <SpectralPanel
+                value={spectral}
+                onChange={setSpectral}
+                collapsed={spectralCollapsed}
+                onCollapseToggle={() => setSpectralCollapsed((c) => !c)}
               />
             )}
             <Tabs defaultValue="network" className="w-full">
