@@ -53,7 +53,7 @@ export interface ServerConfig {
   clientAggregationMethod?: 'none' | '50-50' | 'gravity';
   modelAssignmentMethod?: '1NN' | 'Probabiliste';
   distanceMetric?: 'l1' | 'l2' | 'cosine';
-  clusteringMethod?: 'louvain' | 'kmeans' | 'leiden';
+  clusteringMethod?: 'louvain' | 'kmeans' | 'leiden' | 'spectral';
   kmeansNumClusters?: number; // Number of clusters for K-means (optional, auto-detect if not specified)
   useAgreementMatrix?: boolean; // Whether to use agreement matrix for consensus clustering
   clientsPerRound: number;

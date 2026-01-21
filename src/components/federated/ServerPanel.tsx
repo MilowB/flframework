@@ -235,7 +235,7 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
             </Label>
             <Select
               value={config.clusteringMethod ?? 'louvain'}
-              onValueChange={(value: 'louvain' | 'kmeans' | 'leiden') => onConfigChange({ clusteringMethod: value })}
+              onValueChange={(value: 'louvain' | 'kmeans' | 'leiden' | 'spectral') => onConfigChange({ clusteringMethod: value })}
               disabled={disabled}
             >
               <SelectTrigger className="bg-muted/50 border-border">
@@ -250,6 +250,9 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
                 </SelectItem>
                 <SelectItem value="leiden">
                   <span className="font-medium">Leiden</span>
+                </SelectItem>
+                <SelectItem value="spectral">
+                  <span className="font-medium">Spectral</span>
                 </SelectItem>
               </SelectContent>
             </Select>

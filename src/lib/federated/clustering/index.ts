@@ -2,12 +2,14 @@
 export * from './louvain';
 export * from './kmeans';
 export * from './leiden';
+export * from './spectral';
 
 import type { ModelWeights } from '../core/types';
 import { modelWeightsToMLPWeights, vectorizeModel } from '../models/mlp';
 import { computeDistance, distancesToAdjacency, louvainPartitionWithRng, refinePartitionWithRng } from './louvain';
 import { kmeansClusteringWithRng, determineOptimalK } from './kmeans';
 import { leidenPartitionWithRng } from './leiden';
+import { spectralClusteringWithRng } from './spectral';
 import { clusterModelStore } from '../core/stores';
 import { computeAgreementClustering } from '../server/agreement';
 import { getSeed, SeededRandom } from '../core/random';
@@ -50,7 +52,7 @@ export const computeDistanceMatrix = (
 export const clusterClientModels = (
   clientResults: { id?: string; weights: ModelWeights; dataSize: number }[],
   distanceMetric?: 'l1' | 'l2' | 'cosine',
-  clusteringMethod: 'louvain' | 'kmeans' | 'leiden' = 'louvain',
+  clusteringMethod: 'louvain' | 'kmeans' | 'leiden' | 'spectral' = 'louvain',
   kmeansNumClusters?: number,
   useAgreementMatrix?: boolean,
   referenceModel?: ModelWeights
@@ -120,10 +122,13 @@ export const clusterClientModels = (
     // Leiden clustering
     const A = distancesToAdjacency(D);
     refined = leidenPartitionWithRng(A, isolatedRng);
+  } else if (clusteringMethod === 'spectral') {
+    // Spectral clustering
+    const A = distancesToAdjacency(D);
+    refined = spectralClusteringWithRng(A, isolatedRng, kmeansNumClusters);
   } else {
     // Louvain clustering (default)
     const A = distancesToAdjacency(D);
-    //const partition = louvainPartitionWithRng(A, isolatedRng);
     const partition = louvainPartitionWithRng(A, isolatedRng);
     refined = refinePartitionWithRng(A, partition.slice(), isolatedRng);
   }
