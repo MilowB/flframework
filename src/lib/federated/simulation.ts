@@ -18,7 +18,6 @@ import { clusterModelStore, clientTestDataStore, mlpWeightsStore, clientDataStor
 import { initializeMLPWeightsWithRng, flattenWeights, unflattenWeights, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE } from './models/mlp';
 import { loadMNISTTrain, loadMNISTTest } from './data/mnist';
 import { simulateClientTraining, selectClients, createClient } from './clients/training';
-import { detectGradientIncrease } from './clients/aggregation/gravity';
 import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
@@ -200,18 +199,6 @@ export const runFederatedRound = async (
 
   const trainedClients = await Promise.all(trainingPromises);
 
-  // Detect gradient increase for clients using 'gravity' aggregation
-  let gradientIncreaseDetected = false;
-  if (serverConfig.clientAggregationMethod === 'gravity') {
-    for (const { client } of trainedClients) {
-      if (client.gradientNormHistory && detectGradientIncrease(client.gradientNormHistory)) {
-        console.log(`[Round ${currentRound}] Gradient increase detected for ${client.id}`);
-        gradientIncreaseDetected = true;
-        break; // One detection is enough
-      }
-    }
-  }
-
   /*
   // Phase 3: Receive models
   onServerStatusUpdate('receiving');
@@ -278,40 +265,16 @@ export const runFederatedRound = async (
         return numA - numB;
       }); // Sort by numeric client index for consistent ordering
 
-    // Determine clustering method and parameters for this round
-    let effectiveClusteringMethod = serverConfig.clusteringMethod || 'louvain';
-    let effectiveNumClusters = serverConfig.kmeansNumClusters;
-    let referenceModelForClustering: ModelWeights | undefined = undefined;
-    
-    // If forced to use Spectral clustering this round (due to gradient increase in previous round)
-    if (state.forceSpectralNextRound) {
-      effectiveClusteringMethod = 'spectral';
-      effectiveNumClusters = state.forceSpectralNextRound.numClusters;
-      // Use global model as reference for cosine similarity (compare gradients instead of absolute positions)
-      referenceModelForClustering = globalModel;
-      console.log(`[Round ${currentRound}] Forcing Spectral clustering with ${effectiveNumClusters} clusters and global model as reference due to gradient increase in previous round`);
-      // Reset the flag after using it
-      onStateUpdate({ forceSpectralNextRound: undefined });
-    }
-
     const clustering = clusterClientModels(
       clientResultsWithIds,
       serverConfig.distanceMetric,
-      effectiveClusteringMethod,
-      effectiveNumClusters,
-      serverConfig.useAgreementMatrix,
-      referenceModelForClustering
+      serverConfig.clusteringMethod || 'louvain',
+      serverConfig.kmeansNumClusters,
+      serverConfig.useAgreementMatrix
     );
     distanceMatrixForRound = clustering.distanceMatrix;
     clustersForRound = clustering.clusters;
     agreementMatrixForRound = clustering.agreementMatrix;
-
-    // If gradient increase detected this round, force Spectral clustering for next round
-    if (gradientIncreaseDetected && clustersForRound && clustersForRound.length > 0) {
-      const numClustersDetected = clustersForRound.length;
-      console.log(`[Round ${currentRound}] Setting Spectral clustering for next round with ${numClustersDetected} clusters`);
-      onStateUpdate({ forceSpectralNextRound: { numClusters: numClustersDetected } });
-    }
 
     if (DEBUG_RNG_STATE) {
       sampleRngState(`Round ${currentRound} - After clustering (agreement=${serverConfig.useAgreementMatrix})`);

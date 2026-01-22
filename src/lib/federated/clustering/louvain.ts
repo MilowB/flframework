@@ -38,25 +38,15 @@ export const cosineSimilarity = (a: number[], b: number[]): number => {
 };
 
 // Compute distance using specified metric
-// If reference is provided, computes distance between (a - reference) and (b - reference)
-export const computeDistance = (a: number[], b: number[], metric: 'l1' | 'l2' | 'cosine' = 'cosine', reference?: number[]): number => {
-  // If reference is provided, compute relative vectors
-  let vecA = a;
-  let vecB = b;
-  
-  if (reference && reference.length === a.length) {
-    vecA = a.map((val, i) => val - reference[i]);
-    vecB = b.map((val, i) => val - reference[i]);
-  }
-  
+export const computeDistance = (a: number[], b: number[], metric: 'l1' | 'l2' | 'cosine' = 'cosine'): number => {
   switch (metric) {
     case 'l1':
-      return l1Distance(vecA, vecB);
+      return l1Distance(a, b);
     case 'l2':
-      return l2DistanceEuclidean(vecA, vecB);
+      return l2DistanceEuclidean(a, b);
     case 'cosine':
     default:
-      const similarity = cosineSimilarity(vecA, vecB);
+      const similarity = cosineSimilarity(a, b);
       return 1 - similarity;
   }
 };

@@ -195,7 +195,6 @@ export const determineOptimalK = (
  * @param distanceMetric Distance metric to use ('l1' | 'l2' | 'cosine')
  * @param rng Seeded random number generator
  * @param maxIterations Maximum number of iterations
- * @param referenceVec Optional reference vector for cosine similarity (computes distance relative to this reference)
  * @returns Array of cluster assignments (one per vector)
  */
 export const kmeansClusteringWithRng = (
@@ -203,8 +202,7 @@ export const kmeansClusteringWithRng = (
   k: number,
   distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine',
   rng: SeededRandom,
-  maxIterations: number = 100,
-  referenceVec?: number[]
+  maxIterations: number = 100
 ): number[] => {
   const n = vectors.length;
   if (n === 0) return [];
@@ -224,7 +222,7 @@ export const kmeansClusteringWithRng = (
     for (let i = 0; i < n; i++) {
       let minDist = Infinity;
       for (const centroid of centroids) {
-        const dist = computeDistance(vectors[i], centroid, distanceMetric, referenceVec);
+        const dist = computeDistance(vectors[i], centroid, distanceMetric);
         minDist = Math.min(minDist, dist);
       }
       distances.push(minDist * minDist);
@@ -255,7 +253,7 @@ export const kmeansClusteringWithRng = (
       let minDist = Infinity;
       let bestCluster = 0;
       for (let c = 0; c < k; c++) {
-        const dist = computeDistance(vectors[i], centroids[c], distanceMetric, referenceVec);
+        const dist = computeDistance(vectors[i], centroids[c], distanceMetric);
         if (dist < minDist) {
           minDist = dist;
           bestCluster = c;

@@ -105,7 +105,6 @@ const Benchmark = () => {
 
   const [masterSeed, setMasterSeed] = useState(42);
   const [seedCount, setSeedCountState] = useState(3);
-  const [globalClientCount, setGlobalClientCount] = useState(6);
   
   const [isRunning, setIsRunning] = useState(false);
   const [currentExperimentIndex, setCurrentExperimentIndex] = useState(0);
@@ -131,7 +130,7 @@ const Benchmark = () => {
         id: generateId(),
         name: `Expérience ${prev.length + 1}`,
         config: { ...defaultConfig },
-        clientCount: globalClientCount,
+        clientCount: 6,
         isOpen: true,
         strategyHyperparams: { ...defaultStrategyHyperparams },
       },
@@ -489,27 +488,8 @@ const Benchmark = () => {
               <Progress value={progressPercent} className="h-2" />
             </div>
 
-            {/* Right: Client Count & Seeds */}
+            {/* Right: Seeds */}
             <div className="flex items-center gap-6">
-              <div className="flex items-center gap-4 min-w-[160px]">
-                <Users className="w-5 h-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <Label className="text-sm text-muted-foreground">Clients</Label>
-                    <span className="font-mono text-sm text-primary">{globalClientCount}</span>
-                  </div>
-                  <Slider
-                    value={[globalClientCount]}
-                    onValueChange={([value]) => setGlobalClientCount(value)}
-                    min={2}
-                    max={12}
-                    step={1}
-                    disabled={isRunning}
-                    className="[&_[role=slider]]:bg-primary"
-                  />
-                </div>
-              </div>
-
               <div className="flex items-center gap-2">
                 <Label className="text-sm text-muted-foreground whitespace-nowrap">Seeds</Label>
                 <Input
