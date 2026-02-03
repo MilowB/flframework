@@ -349,6 +349,38 @@ export function compareWeights(w1: MLPWeights, w2: MLPWeights): number {
   return diff;
 }
 
+// Compute cosine similarity between two vectors
+export function computeCosineSimilarity(v1: number[], v2: number[]): number {
+  if (v1.length !== v2.length || v1.length === 0) return 0;
+  
+  let dot = 0;
+  let norm1 = 0;
+  let norm2 = 0;
+  
+  for (let i = 0; i < v1.length; i++) {
+    dot += v1[i] * v2[i];
+    norm1 += v1[i] * v1[i];
+    norm2 += v2[i] * v2[i];
+  }
+  
+  const denom = Math.sqrt(norm1) * Math.sqrt(norm2);
+  if (denom === 0) return 0;
+  
+  return dot / denom;
+}
+
+// Compute delta vector between two models (current - previous)
+export function computeModelDelta(current: { layers: number[][]; bias: number[] }, previous: { layers: number[][]; bias: number[] }): number[] {
+  const currentVec = vectorizeModel(modelWeightsToMLPWeights(current));
+  const previousVec = vectorizeModel(modelWeightsToMLPWeights(previous));
+  
+  const delta: number[] = [];
+  for (let i = 0; i < currentVec.length; i++) {
+    delta.push(currentVec[i] - previousVec[i]);
+  }
+  return delta;
+}
+
 // Log comparison of weights between all clients
 export function logClientModelDifferences(clientModels: Record<string, MLPWeights>) {
   const ids = Object.keys(clientModels);
