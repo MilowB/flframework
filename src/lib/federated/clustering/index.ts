@@ -2,12 +2,14 @@
 export * from './louvain';
 export * from './kmeans';
 export * from './leiden';
+export * from './spectral';
 
 import type { ModelWeights } from '../core/types';
 import { modelWeightsToMLPWeights, vectorizeModel } from '../models/mlp';
 import { computeDistance, distancesToAdjacency, louvainPartitionWithRng, refinePartitionWithRng } from './louvain';
 import { kmeansClusteringWithRng, determineOptimalK } from './kmeans';
 import { leidenPartitionWithRng } from './leiden';
+import { spectralClusteringWithRng } from './spectral';
 import { clusterModelStore } from '../core/stores';
 import { computeAgreementClustering } from '../server/agreement';
 import { getSeed, SeededRandom } from '../core/random';
@@ -38,9 +40,10 @@ export const computeDistanceMatrix = (models: { layers: number[][]; bias: number
 export const clusterClientModels = (
   clientResults: { id?: string; weights: ModelWeights; dataSize: number }[],
   distanceMetric?: 'l1' | 'l2' | 'cosine',
-  clusteringMethod: 'louvain' | 'kmeans' | 'leiden' = 'louvain',
+  clusteringMethod: 'louvain' | 'kmeans' | 'leiden' | 'spectral' = 'louvain',
   kmeansNumClusters?: number,
-  useAgreementMatrix?: boolean
+  useAgreementMatrix?: boolean,
+  spectralNumClusters?: number
 ): { distanceMatrix: number[][]; clusters: string[][]; agreementMatrix?: number[][] } => {
   const validModels: { layers: number[][]; bias: number[] }[] = [];
   const ids: number[] = [];
@@ -99,10 +102,20 @@ export const clusterClientModels = (
     // Leiden clustering
     const A = distancesToAdjacency(D);
     refined = leidenPartitionWithRng(A, isolatedRng);
+  } else if (clusteringMethod === 'spectral') {
+    // Spectral clustering
+    const A = distancesToAdjacency(D);
+    // Determine k for spectral clustering
+    let k: number;
+    if (spectralNumClusters && spectralNumClusters > 0) {
+      k = Math.min(spectralNumClusters, validModels.length);
+    } else {
+      k = Math.min(3, validModels.length); // Default to 3 clusters
+    }
+    refined = spectralClusteringWithRng(A, isolatedRng, k);
   } else {
     // Louvain clustering (default)
     const A = distancesToAdjacency(D);
-    //const partition = louvainPartitionWithRng(A, isolatedRng);
     const partition = louvainPartitionWithRng(A, isolatedRng);
     refined = refinePartitionWithRng(A, partition.slice(), isolatedRng);
   }

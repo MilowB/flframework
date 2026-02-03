@@ -15,7 +15,7 @@ export * from './results';
 import type { FederatedState, ServerStatus, RoundMetrics, ModelWeights, ClusterMetrics, ClientRoundMetrics, ClientState } from './core/types';
 import { getRng, setSeed, getSeed } from './core/random';
 import { clusterModelStore, clientTestDataStore, mlpWeightsStore, clientDataStore, setMnistTrainData, setMnistTestData, resetStores } from './core/stores';
-import { initializeMLPWeightsWithRng, flattenWeights, unflattenWeights, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE } from './models/mlp';
+import { initializeMLPWeightsWithRng, flattenWeights, unflattenWeights, MNIST_INPUT_SIZE, MNIST_HIDDEN_SIZE, MNIST_OUTPUT_SIZE, computeCosineSimilarity, computeModelDelta } from './models/mlp';
 import { loadMNISTTrain, loadMNISTTest } from './data/mnist';
 import { simulateClientTraining, selectClients, createClient } from './clients/training';
 import { aggregationMethods } from './server/aggregation';
@@ -270,7 +270,8 @@ export const runFederatedRound = async (
       serverConfig.distanceMetric,
       serverConfig.clusteringMethod || 'louvain',
       serverConfig.kmeansNumClusters,
-      serverConfig.useAgreementMatrix
+      serverConfig.useAgreementMatrix,
+      serverConfig.spectralNumClusters
     );
     distanceMatrixForRound = clustering.distanceMatrix;
     clustersForRound = clustering.clusters;
@@ -329,6 +330,71 @@ export const runFederatedRound = async (
           clientIds: grp,
           weights: averagedModel // Store weights for visualization
         });
+      }
+    }
+
+    // Calculate cluster cosine similarity for each client
+    // C = average cosine similarity of delta(client) with delta(other cluster members)
+    // where delta = model_current - model_N-1 (after fine-tuning)
+    if (clustersForRound && clustersForRound.length > 0 && currentRound > 0) {
+      const clientMap = new Map(clientResultsWithIds.map(c => [c.id, c]));
+      const selectedClientsMap = new Map(selectedClients.map(c => [c.id, c]));
+      
+      for (let i = 0; i < clientMetricsForRound.length; i++) {
+        const clientMetric = clientMetricsForRound[i];
+        const clientId = clientMetric.clientId;
+        const client = selectedClientsMap.get(clientId);
+        const clientResult = clientMap.get(clientId);
+        
+        if (!client || !clientResult) continue;
+        
+        // Get the client's local model from N-1 (localModelHistory[1] is N-1)
+        const previousModel = client.localModelHistory?.[1];
+        if (!previousModel) continue;
+        
+        // Find which cluster this client belongs to
+        let clusterIdx = -1;
+        let clusterMembers: string[] = [];
+        for (let c = 0; c < clustersForRound.length; c++) {
+          if (clustersForRound[c].includes(clientId)) {
+            clusterIdx = c;
+            clusterMembers = clustersForRound[c];
+            break;
+          }
+        }
+        
+        if (clusterIdx === -1 || clusterMembers.length <= 1) continue;
+        
+        // Compute this client's delta
+        const clientDelta = computeModelDelta(clientResult.weights, previousModel);
+        
+        // Compute cosine similarity with each other cluster member
+        let totalSim = 0;
+        let count = 0;
+        
+        for (const memberId of clusterMembers) {
+          if (memberId === clientId) continue;
+          
+          const memberClient = selectedClientsMap.get(memberId);
+          const memberResult = clientMap.get(memberId);
+          if (!memberClient || !memberResult) continue;
+          
+          // Get member's previous model (N-1)
+          const memberPreviousModel = memberClient.localModelHistory?.[1];
+          if (!memberPreviousModel) continue;
+          
+          // Compute member's delta
+          const memberDelta = computeModelDelta(memberResult.weights, memberPreviousModel);
+          
+          // Compute cosine similarity
+          const similarity = computeCosineSimilarity(clientDelta, memberDelta);
+          totalSim += similarity;
+          count++;
+        }
+        
+        if (count > 0) {
+          clientMetricsForRound[i].clusterCosineSimilarity = totalSim / count;
+        }
       }
     }
   } catch (err) {

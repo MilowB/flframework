@@ -89,6 +89,7 @@ export interface ClientRoundMetrics {
   testAccuracy: number;
   gradientNorm?: number;
   weights?: ModelWeights; // Store client model weights for visualization
+  clusterCosineSimilarity?: number; // Average cosine similarity with cluster members (delta from N-1 model)
 }
 
 export interface RoundMetrics {
