@@ -2,14 +2,12 @@
 export * from './louvain';
 export * from './kmeans';
 export * from './leiden';
-export * from './spectral';
 
 import type { ModelWeights } from '../core/types';
 import { modelWeightsToMLPWeights, vectorizeModel } from '../models/mlp';
 import { computeDistance, distancesToAdjacency, louvainPartitionWithRng, refinePartitionWithRng } from './louvain';
 import { kmeansClusteringWithRng, determineOptimalK } from './kmeans';
 import { leidenPartitionWithRng } from './leiden';
-import { spectralClusteringWithRng } from './spectral';
 import { clusterModelStore } from '../core/stores';
 import { computeAgreementClustering } from '../server/agreement';
 import { getSeed, SeededRandom } from '../core/random';
@@ -18,29 +16,17 @@ import { getSeed, SeededRandom } from '../core/random';
 const DEBUG_CLUSTERING_RNG = false;
 
 // Compute distance matrix between client models
-// If referenceModel is provided, computes distances relative to that model (for gradient-based similarity)
-export const computeDistanceMatrix = (
-  models: { layers: number[][]; bias: number[] }[], 
-  distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine',
-  referenceModel?: { layers: number[][]; bias: number[] }
-): number[][] => {
+export const computeDistanceMatrix = (models: { layers: number[][]; bias: number[] }[], distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine'): number[][] => {
   const n = models.length;
   const vecs = models.map(m => {
     const mlp = modelWeightsToMLPWeights(m);
     return vectorizeModel(mlp);
   });
   
-  // Vectorize reference model if provided
-  let referenceVec: number[] | undefined;
-  if (referenceModel) {
-    const refMlp = modelWeightsToMLPWeights(referenceModel);
-    referenceVec = vectorizeModel(refMlp);
-  }
-  
   const D: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const d = computeDistance(vecs[i], vecs[j], distanceMetric, referenceVec);
+      const d = computeDistance(vecs[i], vecs[j], distanceMetric);
       D[i][j] = d;
       D[j][i] = d;
     }
@@ -52,10 +38,9 @@ export const computeDistanceMatrix = (
 export const clusterClientModels = (
   clientResults: { id?: string; weights: ModelWeights; dataSize: number }[],
   distanceMetric?: 'l1' | 'l2' | 'cosine',
-  clusteringMethod: 'louvain' | 'kmeans' | 'leiden' | 'spectral' = 'louvain',
+  clusteringMethod: 'louvain' | 'kmeans' | 'leiden' = 'louvain',
   kmeansNumClusters?: number,
-  useAgreementMatrix?: boolean,
-  referenceModel?: ModelWeights
+  useAgreementMatrix?: boolean
 ): { distanceMatrix: number[][]; clusters: string[][]; agreementMatrix?: number[][] } => {
   const validModels: { layers: number[][]; bias: number[] }[] = [];
   const ids: number[] = [];
@@ -70,7 +55,7 @@ export const clusterClientModels = (
     }
   }
 
-  const D = computeDistanceMatrix(validModels, distanceMetric, referenceModel);
+  const D = computeDistanceMatrix(validModels, distanceMetric);
   if (validModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][], agreementMatrix: undefined };
 
   // Get client IDs
@@ -102,13 +87,6 @@ export const clusterClientModels = (
       return vectorizeModel(mlp);
     });
     
-    // Vectorize reference model if provided (for gradient-based cosine similarity)
-    let referenceVec: number[] | undefined;
-    if (referenceModel) {
-      const refMlp = modelWeightsToMLPWeights(referenceModel);
-      referenceVec = vectorizeModel(refMlp);
-    }
-    
     // Use specified k or determine optimal k automatically
     let k: number;
     if (kmeansNumClusters && kmeansNumClusters > 0) {
@@ -116,19 +94,15 @@ export const clusterClientModels = (
     } else {
       k = Math.min(determineOptimalK(vecs, distanceMetric, 5), validModels.length);
     }
-    // Pass reference vector to K-means for gradient-based cosine similarity
-    refined = kmeansClusteringWithRng(vecs, k, distanceMetric, isolatedRng, 100, referenceVec);
+    refined = kmeansClusteringWithRng(vecs, k, distanceMetric, isolatedRng);
   } else if (clusteringMethod === 'leiden') {
     // Leiden clustering
     const A = distancesToAdjacency(D);
     refined = leidenPartitionWithRng(A, isolatedRng);
-  } else if (clusteringMethod === 'spectral') {
-    // Spectral clustering
-    const A = distancesToAdjacency(D);
-    refined = spectralClusteringWithRng(A, isolatedRng, kmeansNumClusters);
   } else {
     // Louvain clustering (default)
     const A = distancesToAdjacency(D);
+    //const partition = louvainPartitionWithRng(A, isolatedRng);
     const partition = louvainPartitionWithRng(A, isolatedRng);
     refined = refinePartitionWithRng(A, partition.slice(), isolatedRng);
   }

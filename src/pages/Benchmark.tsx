@@ -232,7 +232,7 @@ const Benchmark = () => {
               clustersForRound
             );
             clustersForRound = nextClusters;
-            state.roundHistory = [...state.roundHistory, metrics];
+            // roundHistory is already updated by runFederatedRound via onStateUpdate callback
           } catch (error) {
             console.error('Round failed:', error);
             break;

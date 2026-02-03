@@ -119,7 +119,6 @@ export interface FederatedState {
   roundHistory: RoundMetrics[];
   globalModel: ModelWeights | null;
   serverStatus: ServerStatus;
-  forceSpectralNextRound?: { numClusters: number }; // Force Spectral clustering for one round with specified number of clusters
 }
 
 export type AggregationFunction = (
