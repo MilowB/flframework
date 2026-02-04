@@ -14,7 +14,7 @@ export const clientCosineSimilarityHistory: Map<string, number[]> = new Map();
 export const clientReassignmentStore: Map<string, number> = new Map();
 
 // Threshold for detecting a significant drop (40% lower)
-const DROP_THRESHOLD = 0.4;
+const DROP_THRESHOLD = 0.25;
 
 // Reset stores (for clean experiment restart)
 export const resetCosineSimilarityStores = (): void => {
@@ -53,7 +53,8 @@ export const detectCosineSimilarityDrop = (
   
   // Calculate drop percentage
   const dropRatio = (previousSim - currentSim) / Math.abs(previousSim);
-  
+  console.log(`previousSim ${previousSim}, currentSim ${currentSim}`)
+  console.log("client " + clientId + " - dropRatio : " + dropRatio);
   return dropRatio >= DROP_THRESHOLD;
 };
 
@@ -76,7 +77,7 @@ export const findClosestCluster = (
       break;
     }
   }
-  
+
   // Calculate average distance to each cluster (excluding current)
   let minAvgDistance = Infinity;
   let closestCluster = -1;
@@ -108,6 +109,131 @@ export const findClosestCluster = (
   }
   
   return closestCluster;
+};
+
+// Find which clients the given client has moved closer to between two rounds
+// Returns an array of { clientId, distanceChange, newDistance } sorted by most approached (largest negative change)
+export const findApproachedClients = (
+  clientId: string,
+  currentDistanceMatrix: number[][],
+  previousDistanceMatrix: number[][],
+  clusters: string[][],
+  participatingClients: string[]
+): { clientId: string; distanceChange: number; newDistance: number; clusterId: number }[] => {
+  // Find client index in the distance matrix
+  const clientIdx = participatingClients.indexOf(clientId);
+  if (clientIdx === -1) return [];
+  
+  // Validate matrix dimensions
+  if (!currentDistanceMatrix || !previousDistanceMatrix) return [];
+  if (currentDistanceMatrix.length !== previousDistanceMatrix.length) return [];
+  if (clientIdx >= currentDistanceMatrix.length || clientIdx >= previousDistanceMatrix.length) return [];
+  
+  const results: { clientId: string; distanceChange: number; newDistance: number; clusterId: number }[] = [];
+  
+  // Compare distances to all other clients
+  for (let otherIdx = 0; otherIdx < participatingClients.length; otherIdx++) {
+    if (otherIdx === clientIdx) continue; // Skip self
+    
+    const otherId = participatingClients[otherIdx];
+    
+    // Get distances from both matrices
+    const currentDistance = currentDistanceMatrix[clientIdx]?.[otherIdx];
+    const previousDistance = previousDistanceMatrix[clientIdx]?.[otherIdx];
+    
+    // Skip if either distance is undefined or NaN
+    if (currentDistance === undefined || previousDistance === undefined) continue;
+    if (isNaN(currentDistance) || isNaN(previousDistance)) continue;
+    
+    // Calculate distance change (negative = got closer)
+    const distanceChange = currentDistance - previousDistance;
+    
+    // Find which cluster this other client belongs to
+    let clusterId = -1;
+    for (let c = 0; c < clusters.length; c++) {
+      if (clusters[c].includes(otherId)) {
+        clusterId = c;
+        break;
+      }
+    }
+    
+    results.push({
+      clientId: otherId,
+      distanceChange,
+      newDistance: currentDistance,
+      clusterId
+    });
+  }
+  
+  // Sort by distance change (most negative first = most approached)
+  results.sort((a, b) => a.distanceChange - b.distanceChange);
+  
+  return results;
+};
+
+// Find which cluster the client has moved closest to (based on average distance change)
+export const findMostApproachedCluster = (
+  clientId: string,
+  currentDistanceMatrix: number[][],
+  previousDistanceMatrix: number[][],
+  clusters: string[][],
+  participatingClients: string[]
+): { clusterId: number; avgDistanceChange: number; approachedClients: string[] } | null => {
+  const approachedClients = findApproachedClients(
+    clientId,
+    currentDistanceMatrix,
+    previousDistanceMatrix,
+    clusters,
+    participatingClients
+  );
+  
+  if (approachedClients.length === 0) return null;
+  
+  // Find current cluster of the client
+  let currentCluster = -1;
+  for (let c = 0; c < clusters.length; c++) {
+    if (clusters[c].includes(clientId)) {
+      currentCluster = c;
+      break;
+    }
+  }
+  
+  // Calculate average distance change per cluster (excluding current cluster)
+  const clusterChanges: Map<number, { totalChange: number; count: number; clients: string[] }> = new Map();
+  
+  for (const result of approachedClients) {
+    if (result.clusterId === -1 || result.clusterId === currentCluster) continue;
+    
+    const existing = clusterChanges.get(result.clusterId) || { totalChange: 0, count: 0, clients: [] };
+    existing.totalChange += result.distanceChange;
+    existing.count++;
+    if (result.distanceChange < 0) { // Only add if actually approached
+      existing.clients.push(result.clientId);
+    }
+    clusterChanges.set(result.clusterId, existing);
+  }
+  
+  // Find cluster with most negative average change
+  let bestCluster = -1;
+  let bestAvgChange = 0;
+  let bestClients: string[] = [];
+  
+  for (const [clusterId, data] of clusterChanges) {
+    const avgChange = data.totalChange / data.count;
+    if (avgChange < bestAvgChange) {
+      bestAvgChange = avgChange;
+      bestCluster = clusterId;
+      bestClients = data.clients;
+    }
+  }
+  
+  if (bestCluster === -1) return null;
+  
+  return {
+    clusterId: bestCluster,
+    avgDistanceChange: bestAvgChange,
+    approachedClients: bestClients
+  };
 };
 
 // Schedule a client for reassignment at the next round

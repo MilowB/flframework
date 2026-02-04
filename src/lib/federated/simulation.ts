@@ -21,7 +21,7 @@ import { simulateClientTraining, selectClients, createClient } from './clients/t
 import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
-import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findClosestCluster, scheduleReassignment, resetCosineSimilarityStores } from './assignment';
+import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores } from './assignment';
 
 import {
   pca3D_single
@@ -87,6 +87,8 @@ export const runFederatedRound = async (
 ): Promise<[RoundMetrics, string[][] | undefined]> => {
   const { serverConfig, clients, globalModel, currentRound } = state;
 
+  console.log(`--- NOUVEAU ROUND ${currentRound} ---`);
+
   if (DEBUG_RNG_STATE) {
     console.log(`\n=== Round ${currentRound} START ===`);
     console.log(`[RNG Debug] Agreement matrix enabled: ${serverConfig.useAgreementMatrix}`);
@@ -126,6 +128,44 @@ export const runFederatedRound = async (
     await new Promise(resolve => setTimeout(resolve, 300));
   }
 
+  // Pre-Phase 2: Detect cosine similarity drops and compute immediate reassignments
+  // This happens BEFORE sending models so clients receive the correct cluster model
+  const immediateReassignments: Map<string, number> = new Map();
+  
+  if (serverConfig.modelAssignmentMethod === 'CosineSimilarity' && currentRound >= 2) {
+    // Get distance matrices from previous rounds
+    const currentRoundMetrics = state.roundHistory[currentRound - 1]; // Round N-1 (last completed)
+    const previousRoundMetrics = state.roundHistory[currentRound - 2]; // Round N-2
+    
+    const currentDistanceMatrix = currentRoundMetrics?.distanceMatrix;
+    const previousDistanceMatrix = previousRoundMetrics?.distanceMatrix;
+    const previousClusters = currentRoundMetrics?.clusters;
+    const previousParticipants = currentRoundMetrics?.participatingClients;
+    
+    if (currentDistanceMatrix && previousDistanceMatrix && previousClusters && previousParticipants) {
+      for (const client of selectedClients) {
+        // Check if this client had a significant drop at round N-1
+        if (detectCosineSimilarityDrop(client.id, currentRound)) {
+          console.log(`[Cosine Similarity] Client ${client.id} detected drop at round ${currentRound - 1}`);
+          
+          // Find the cluster the client moved closest to
+          const result = findMostApproachedCluster(
+            client.id,
+            currentDistanceMatrix,
+            previousDistanceMatrix,
+            previousClusters,
+            previousParticipants
+          );
+          
+          if (result && result.clusterId >= 0) {
+            immediateReassignments.set(client.id, result.clusterId);
+            console.log(`[Cosine Similarity] Client ${client.id} will receive model from cluster ${result.clusterId} (avg change: ${result.avgDistanceChange.toFixed(4)}, approached clients: ${result.approachedClients.join(', ')})`);
+          }
+        }
+      }
+    }
+  }
+
   // Phase 2: Clients train
   onServerStatusUpdate('waiting');
   let modelsSentToClients = {};
@@ -149,20 +189,49 @@ export const runFederatedRound = async (
 
     const modelAssignmentMethod = serverConfig.modelAssignmentMethod || '1NN';
 
-    // Modèle envoyé au client par le serveur
-    const modelToSend = applyAssignment(
-      modelAssignmentMethod,
-      client,
-      {
-        globalModel,
-        clusterModels,
-        clusterAssignments,
-        clusterClientIds,
-        selectedClients,
-        round: currentRound,
-        distanceMetric: serverConfig.distanceMetric,
+    // Check for immediate reassignment (cosine similarity drop detected)
+    const reassignedCluster = immediateReassignments.get(client.id);
+    let modelToSend: ModelWeights;
+    
+    if (reassignedCluster !== undefined) {
+      // Client was detected with a drop - send the model from the target cluster
+      const targetClusterModel = clusterModelStore.get(`cluster-${reassignedCluster}`);
+      if (targetClusterModel) {
+        modelToSend = targetClusterModel;
+        console.log(`[Cosine Similarity] Client ${client.id} receiving model from cluster ${reassignedCluster} (immediate reassignment)`);
+      } else {
+        // Fallback to normal assignment if cluster model not found
+        modelToSend = applyAssignment(
+          modelAssignmentMethod,
+          client,
+          {
+            globalModel,
+            clusterModels,
+            clusterAssignments,
+            clusterClientIds,
+            selectedClients,
+            round: currentRound,
+            distanceMetric: serverConfig.distanceMetric,
+          }
+        );
       }
-    );
+    } else {
+      // Normal model assignment
+      modelToSend = applyAssignment(
+        modelAssignmentMethod,
+        client,
+        {
+          globalModel,
+          clusterModels,
+          clusterAssignments,
+          clusterClientIds,
+          selectedClients,
+          round: currentRound,
+          distanceMetric: serverConfig.distanceMetric,
+        }
+      );
+    }
+    
     // Stocker dans le dictionnaire pour ce client
     modelsSentToClients[client.id] = modelToSend;
 
@@ -402,28 +471,8 @@ export const runFederatedRound = async (
         }
       }
       
-      // Detect drops and schedule reassignments for Cosine Similarity strategy
-      if (serverConfig.modelAssignmentMethod === 'CosineSimilarity' && distanceMatrixForRound) {
-        for (const clientMetric of clientMetricsForRound) {
-          const clientId = clientMetric.clientId;
-          
-          // Check if this client had a significant drop
-          if (detectCosineSimilarityDrop(clientId, currentRound)) {
-            // Find the closest cluster in the distance matrix
-            const targetCluster = findClosestCluster(
-              clientId,
-              distanceMatrixForRound,
-              clustersForRound,
-              participatingIds
-            );
-            
-            if (targetCluster >= 0) {
-              scheduleReassignment(clientId, targetCluster);
-              console.log(`[Cosine Similarity] Client ${clientId} detected drop, scheduled for cluster ${targetCluster}`);
-            }
-          }
-        }
-      }
+      // Note: Reassignment detection is now done BEFORE training (Pre-Phase 2)
+      // so clients receive the correct model immediately at the current round
     }
   } catch (err) {
     console.warn('Clustering failed:', err);
