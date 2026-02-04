@@ -21,7 +21,7 @@ import { simulateClientTraining, selectClients, createClient } from './clients/t
 import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
-import { applyAssignment } from './assignment';
+import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findClosestCluster, scheduleReassignment, resetCosineSimilarityStores } from './assignment';
 
 import {
   pca3D_single
@@ -44,6 +44,7 @@ export const initializeModel = (architecture: string): ModelWeights => {
   );
   mlpWeightsStore.set('global', mlpWeights);
   resetStores();
+  resetCosineSimilarityStores();
 
   const flat = flattenWeights(mlpWeights);
   return {
@@ -393,7 +394,34 @@ export const runFederatedRound = async (
         }
         
         if (count > 0) {
-          clientMetricsForRound[i].clusterCosineSimilarity = totalSim / count;
+          const avgSimilarity = totalSim / count;
+          clientMetricsForRound[i].clusterCosineSimilarity = avgSimilarity;
+          
+          // Record cosine similarity for Cosine Similarity assignment strategy
+          recordClientCosineSimilarity(clientId, avgSimilarity, currentRound);
+        }
+      }
+      
+      // Detect drops and schedule reassignments for Cosine Similarity strategy
+      if (serverConfig.modelAssignmentMethod === 'CosineSimilarity' && distanceMatrixForRound) {
+        for (const clientMetric of clientMetricsForRound) {
+          const clientId = clientMetric.clientId;
+          
+          // Check if this client had a significant drop
+          if (detectCosineSimilarityDrop(clientId, currentRound)) {
+            // Find the closest cluster in the distance matrix
+            const targetCluster = findClosestCluster(
+              clientId,
+              distanceMatrixForRound,
+              clustersForRound,
+              participatingIds
+            );
+            
+            if (targetCluster >= 0) {
+              scheduleReassignment(clientId, targetCluster);
+              console.log(`[Cosine Similarity] Client ${clientId} detected drop, scheduled for cluster ${targetCluster}`);
+            }
+          }
         }
       }
     }

@@ -1,8 +1,9 @@
 import type { ModelWeights, ClientState } from '../types';
 import { getModelFor1NN } from './oneNN';
 import { computeProbabilisticAssignments } from './probabilistic';
+import { getModelForCosineSimilarity } from './cosineSimilarity';
 
-export type AssignmentMethod = '1NN' | 'Probabiliste' | 'Gravity';
+export type AssignmentMethod = '1NN' | 'Probabiliste' | 'CosineSimilarity';
 
 export interface AssignmentContext {
     globalModel: ModelWeights;
@@ -49,6 +50,11 @@ export const applyAssignment = (
                 ) || context.globalModel;
             }
         }
+        case 'CosineSimilarity':
+            return getModelForCosineSimilarity(
+                client.id,
+                context.globalModel
+            );
         default:
             return context.globalModel;
     }
@@ -56,3 +62,4 @@ export const applyAssignment = (
 // Assignment module exports
 export * from './oneNN';
 export * from './probabilistic';
+export * from './cosineSimilarity';
