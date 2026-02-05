@@ -654,7 +654,7 @@ const ExperimentPanel = ({
                 <Label className="text-sm text-muted-foreground">Architecture</Label>
                 <Select
                   value={config.modelArchitecture}
-                  onValueChange={(value) => onUpdateConfig({ modelArchitecture: value })}
+                  onValueChange={(value: 'mlp-small' | 'cnn-lite' | 'cnn-standard') => onUpdateConfig({ modelArchitecture: value })}
                   disabled={disabled}
                 >
                   <SelectTrigger className="bg-muted/50">
