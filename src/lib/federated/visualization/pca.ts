@@ -1,16 +1,50 @@
-// PCA-based 3D projection for model visualization
-import { ModelWeights } from '../core/types';
+ // PCA-based 3D projection for model visualization
+ import { ModelWeights } from '../core/types';
+ 
+ /**
+  * Recursively flatten any nested array structure into a 1D array of numbers
+  */
+ function flattenDeep(arr: unknown): number[] {
+   const result: number[] = [];
+   const stack: unknown[] = [arr];
+   
+   while (stack.length > 0) {
+     const item = stack.pop();
+     if (Array.isArray(item)) {
+       // Push items in reverse order to maintain original order
+       for (let i = item.length - 1; i >= 0; i--) {
+         stack.push(item[i]);
+       }
+     } else if (typeof item === 'number' && !isNaN(item)) {
+       result.push(item);
+     }
+   }
+   
+   return result;
+ }
 
 /**
  * Flatten a ModelWeights object into a 1D array
  */
 export function flattenModelWeights(model: ModelWeights): number[] {
-  const flat: number[] = [];
-  for (const layer of model.layers) {
-    flat.push(...layer);
+   if (!model || !model.layers) {
+     return [];
   }
-  flat.push(...model.bias);
-  return flat;
+   
+   // Use iterative flattening to handle both MLP (number[][]) and CNN (nested arrays) weights
+   const flat: number[] = [];
+   
+   // Flatten layers - handles both simple 1D arrays and nested multi-dimensional arrays
+   for (const layer of model.layers) {
+     const flattened = flattenDeep(layer);
+     flat.push(...flattened);
+   }
+   
+   // Flatten bias - also handles nested structures
+   const biasFlat = flattenDeep(model.bias);
+   flat.push(...biasFlat);
+   
+   return flat;
 }
 
 /**
