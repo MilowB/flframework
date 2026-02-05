@@ -138,7 +138,7 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
             </Label>
             <Select
               value={config.modelArchitecture}
-              onValueChange={(value) => onConfigChange({ modelArchitecture: value })}
+              onValueChange={(value: 'mlp-small' | 'cnn-lite' | 'cnn-standard') => onConfigChange({ modelArchitecture: value })}
               disabled={disabled}
             >
               <SelectTrigger className="bg-muted/50 border-border">
