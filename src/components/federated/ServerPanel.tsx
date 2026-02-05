@@ -18,6 +18,8 @@ interface ServerPanelProps {
 
 const architectures = [
   { value: 'mlp-small', label: 'MLP Small (784→128→10)' },
+  { value: 'cnn-lite', label: 'CNN Lite (16 filters, 64 FC)' },
+  { value: 'cnn-standard', label: 'CNN Standard (32→64 filters, 128 FC)' },
 ];
 
 export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersion }: ServerPanelProps) => {

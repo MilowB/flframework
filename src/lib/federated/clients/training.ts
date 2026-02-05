@@ -2,6 +2,7 @@
 
 import type { ClientState, ModelWeights } from '../core/types';
 import type { MLPWeights } from '../models/mlp';
+import type { CNNWeights, CNNConfig } from '../models/cnn';
 import { getRng, getSeed } from '../core/random';
 import {
   clientDataStore,
@@ -22,8 +23,36 @@ import {
   MNIST_HIDDEN_SIZE,
   MNIST_OUTPUT_SIZE
 } from '../models/mlp';
+import {
+  initializeCNNWeights,
+  cloneCNNWeights,
+  cnnTrainEpoch,
+  cnnComputeAccuracy,
+  flattenCNNWeights,
+  MNIST_CNN_LITE_CONFIG,
+  MNIST_CNN_CONFIG,
+} from '../models/cnn';
 import { loadMNISTTrain, getClientDataSubset, oneHot } from '../data/mnist';
 import { applyClientAggregation, computeAdaptiveEpochs } from './aggregation';
+
+// Global store for CNN weights per client
+const clientCNNWeights = new Map<string, CNNWeights>();
+
+// Get CNN config based on architecture name
+export const getCNNConfig = (architecture: string): CNNConfig => {
+  switch (architecture) {
+    case 'cnn-standard':
+      return MNIST_CNN_CONFIG;
+    case 'cnn-lite':
+    default:
+      return MNIST_CNN_LITE_CONFIG;
+  }
+};
+
+// Check if architecture is CNN-based
+export const isCNNArchitecture = (architecture: string): boolean => {
+  return architecture.startsWith('cnn-');
+};
 
 // Generate client-specific test data that mimics training distribution
 export const generateClientTestData = (clientId: string, trainDataSize: number): void => {
@@ -43,6 +72,18 @@ export const evaluateClientOnTestSet = (
   if (!testData) return 0;
 
   return computeAccuracy(testData.inputs, testData.outputs, localMLP);
+};
+
+// Evaluate CNN model on client's personalized test set
+export const evaluateClientOnCNNTestSet = (
+  clientId: string,
+  cnnWeights: CNNWeights,
+  config: CNNConfig
+): number => {
+  const testData = clientTestDataStore.get(clientId);
+  if (!testData) return 0;
+
+  return cnnComputeAccuracy(testData.inputs, testData.outputs, cnnWeights, config);
 };
 
 // Compute gradient norm (L2 norm of the weight difference before/after training)
@@ -80,6 +121,20 @@ export const computeGradientNorm = (before: MLPWeights, after: MLPWeights): numb
   return Math.sqrt(sumSquares);
 };
 
+// Compute gradient norm for CNN weights
+export const computeCNNGradientNorm = (before: CNNWeights, after: CNNWeights): number => {
+  const beforeFlat = flattenCNNWeights(before);
+  const afterFlat = flattenCNNWeights(after);
+  
+  let sumSquares = 0;
+  for (let i = 0; i < beforeFlat.length; i++) {
+    const diff = afterFlat[i] - beforeFlat[i];
+    sumSquares += diff * diff;
+  }
+  
+  return Math.sqrt(sumSquares);
+};
+
 // Real client training with MLP on MNIST data
 export const simulateClientTraining = async (
   client: ClientState,
@@ -87,13 +142,25 @@ export const simulateClientTraining = async (
   onProgress: (progress: number) => void,
   onStatusUpdate?: (status: 'training' | 'evaluating') => void,
   currentRound?: number,
-  globalModelFromServer?: ModelWeights
+  globalModelFromServer?: ModelWeights,
+  modelArchitecture: string = 'mlp-small'
 ): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number; gradientNorm: number }> => {
   // Ensure MNIST is loaded
   let trainData = mnistTrainData;
   if (!trainData) {
     trainData = await loadMNISTTrain();
     setMnistTrainData(trainData);
+  }
+
+  // Route to CNN training if architecture is CNN-based
+  if (isCNNArchitecture(modelArchitecture)) {
+    return simulateCNNClientTraining(
+      client,
+      globalModel,
+      onProgress,
+      onStatusUpdate,
+      modelArchitecture
+    );
   }
 
   // --- Save last 3 local models for N, N-1, N-2 ---
@@ -238,6 +305,104 @@ export const simulateClientTraining = async (
     testAccuracy,
     gradientNorm,
   };
+};
+
+// CNN client training
+export const simulateCNNClientTraining = async (
+  client: ClientState,
+  globalModel: ModelWeights,
+  onProgress: (progress: number) => void,
+  onStatusUpdate?: (status: 'training' | 'evaluating') => void,
+  modelArchitecture: string = 'cnn-lite'
+): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number; gradientNorm: number }> => {
+  // Ensure MNIST is loaded
+  let trainData = mnistTrainData;
+  if (!trainData) {
+    trainData = await loadMNISTTrain();
+    setMnistTrainData(trainData);
+  }
+
+  const cnnConfig = getCNNConfig(modelArchitecture);
+
+  // Get or initialize CNN weights for this client
+  let cnnWeights = clientCNNWeights.get(client.id);
+  if (!cnnWeights) {
+    cnnWeights = initializeCNNWeights(cnnConfig);
+    clientCNNWeights.set(client.id, cnnWeights);
+  }
+
+  // Clone weights for training - keep a copy for gradient norm
+  const modelBeforeTraining = cloneCNNWeights(cnnWeights);
+  const localCNN = cloneCNNWeights(cnnWeights);
+
+  // Get or generate client-specific MNIST subset (non-IID) using global seed
+  if (!clientDataStore.has(client.id)) {
+    clientDataStore.set(client.id, getClientDataSubset(trainData, client.id, client.dataSize, true, getSeed()));
+  }
+
+  // Generate client-specific test data if not already done
+  if (!clientTestDataStore.has(client.id) && mnistTestData) {
+    generateClientTestData(client.id, client.dataSize);
+  }
+
+  const { inputs, outputs } = clientDataStore.get(client.id)!;
+
+  // Training configuration
+  const localEpochs = client.localEpochs !== undefined ? client.localEpochs : 3;
+  const learningRate = client.learningRate !== undefined ? client.learningRate : 0.01;
+
+  let loss = 0;
+  let accuracy = 0;
+
+  // Training loop
+  for (let epoch = 0; epoch < localEpochs; epoch++) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const { avgLoss } = cnnTrainEpoch(inputs, outputs, localCNN, cnnConfig, learningRate);
+    loss = avgLoss;
+    accuracy = cnnComputeAccuracy(inputs, outputs, localCNN, cnnConfig);
+
+    onProgress(((epoch + 1) / localEpochs) * 100);
+  }
+
+  // Evaluate on personalized test set
+  onStatusUpdate?.('evaluating');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const testAccuracy = evaluateClientOnCNNTestSet(client.id, localCNN, cnnConfig);
+
+  // Compute gradient norm
+  const gradientNorm = computeCNNGradientNorm(modelBeforeTraining, localCNN);
+
+  // Save updated CNN weights
+  clientCNNWeights.set(client.id, localCNN);
+
+  // Convert CNN weights to flat format for compatibility with ModelWeights interface
+  const flatWeights = flattenCNNWeights(localCNN);
+  
+  // Split flat weights into layers format (simplified for compatibility)
+  const layerSize = Math.ceil(flatWeights.length / 2);
+  const layers = [
+    flatWeights.slice(0, layerSize),
+    flatWeights.slice(layerSize)
+  ];
+  const bias = flatWeights.slice(0, 10); // First 10 values as bias proxy
+
+  return {
+    weights: {
+      layers,
+      bias,
+      version: globalModel.version,
+    },
+    loss,
+    accuracy,
+    testAccuracy,
+    gradientNorm,
+  };
+};
+
+// Reset CNN weights store (call when starting new simulation)
+export const resetCNNWeightsStore = (): void => {
+  clientCNNWeights.clear();
 };
 
 // Select clients for this round using global seeded RNG

@@ -60,7 +60,7 @@ export interface ServerConfig {
   clientsPerRound: number;
   totalRounds: number;
   minClientsRequired: number;
-  modelArchitecture: string;
+  modelArchitecture: 'mlp-small' | 'cnn-lite' | 'cnn-standard';
   seed?: number;
   clientCount?: number;
 }
