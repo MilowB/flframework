@@ -108,7 +108,7 @@ export const getClientDataSubset = (
   numSamples: number,
   nonIID: boolean = true,
   seed: number = 42,
-  distributionMode: 'pairs' | 'groups' = 'groups'
+  distributionMode: 'pairs' | 'groups' = 'pairs'
 ): { inputs: number[][]; outputs: number[][] } => {
   const inputs: number[][] = [];
   const outputs: number[][] = [];
@@ -150,7 +150,7 @@ export const getClientDataSubset = (
       primaryLabel = found;
     }
 
-    const primaryCount = Math.floor(numSamples * 0.7);
+    const primaryCount = Math.floor(numSamples * 0.4); // @debug, devrait être à 0.7 pour 70%
     const randomCount = numSamples - primaryCount;
 
     const seededShuffle = <T,>(arr: T[], seed: number) => {
