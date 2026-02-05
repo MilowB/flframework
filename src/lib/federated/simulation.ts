@@ -254,7 +254,8 @@ export const runFederatedRound = async (
       (progress) => onClientUpdate(client.id, { progress }),
       (status) => onClientUpdate(client.id, { status }),
       currentRound,
-      globalModel
+      globalModel,
+      serverConfig.modelArchitecture
     );
     onClientUpdate(client.id, {
       status: 'sending',
