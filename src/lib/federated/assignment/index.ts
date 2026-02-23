@@ -2,8 +2,9 @@ import type { ModelWeights, ClientState } from '../types';
 import { getModelFor1NN } from './oneNN';
 import { computeProbabilisticAssignments } from './probabilistic';
 import { getModelForCosineSimilarity } from './cosineSimilarity';
+import { getModelForAlexandre, type AlexandreContext } from './alexandre';
 
-export type AssignmentMethod = '1NN' | 'Probabiliste' | 'CosineSimilarity';
+export type AssignmentMethod = '1NN' | 'Probabiliste' | 'CosineSimilarity' | 'Alexandre';
 
 export interface AssignmentContext {
     globalModel: ModelWeights;
