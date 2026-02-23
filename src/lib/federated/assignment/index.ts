@@ -14,6 +14,7 @@ export interface AssignmentContext {
     selectedClients?: ClientState[];
     round?: number; // numéro du round fédéré
     distanceMetric?: 'l1' | 'l2' | 'cosine';
+    alexandreContext?: AlexandreContext;
 }
 
 export const applyAssignment = (
