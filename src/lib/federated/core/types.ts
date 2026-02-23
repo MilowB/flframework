@@ -51,7 +51,7 @@ export interface ClientState {
 export interface ServerConfig {
   aggregationMethod: 'fedavg' | 'fedprox' | 'scaffold' | 'custom';
   clientAggregationMethod?: 'none' | '50-50' | 'gravity';
-  modelAssignmentMethod?: '1NN' | 'Probabiliste' | 'CosineSimilarity';
+  modelAssignmentMethod?: '1NN' | 'Probabiliste' | 'CosineSimilarity' | 'Alexandre';
   distanceMetric?: 'l1' | 'l2' | 'cosine';
   clusteringMethod?: 'louvain' | 'kmeans' | 'leiden' | 'spectral';
   kmeansNumClusters?: number; // Number of clusters for K-means (optional, auto-detect if not specified)

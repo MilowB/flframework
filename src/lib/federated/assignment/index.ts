@@ -2,8 +2,9 @@ import type { ModelWeights, ClientState } from '../types';
 import { getModelFor1NN } from './oneNN';
 import { computeProbabilisticAssignments } from './probabilistic';
 import { getModelForCosineSimilarity } from './cosineSimilarity';
+import { getModelForAlexandre, type AlexandreContext } from './alexandre';
 
-export type AssignmentMethod = '1NN' | 'Probabiliste' | 'CosineSimilarity';
+export type AssignmentMethod = '1NN' | 'Probabiliste' | 'CosineSimilarity' | 'Alexandre';
 
 export interface AssignmentContext {
     globalModel: ModelWeights;
@@ -13,6 +14,7 @@ export interface AssignmentContext {
     selectedClients?: ClientState[];
     round?: number; // numéro du round fédéré
     distanceMetric?: 'l1' | 'l2' | 'cosine';
+    alexandreContext?: AlexandreContext;
 }
 
 export const applyAssignment = (
@@ -55,6 +57,10 @@ export const applyAssignment = (
                 client.id,
                 context.globalModel
             );
+        case 'Alexandre': {
+            if (!context.alexandreContext) return context.globalModel;
+            return getModelForAlexandre(client.id, context.alexandreContext);
+        }
         default:
             return context.globalModel;
     }
@@ -63,3 +69,4 @@ export const applyAssignment = (
 export * from './oneNN';
 export * from './probabilistic';
 export * from './cosineSimilarity';
+export * from './alexandre';
