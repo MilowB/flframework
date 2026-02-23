@@ -57,6 +57,10 @@ export const applyAssignment = (
                 client.id,
                 context.globalModel
             );
+        case 'Alexandre': {
+            if (!context.alexandreContext) return context.globalModel;
+            return getModelForAlexandre(client.id, context.alexandreContext);
+        }
         default:
             return context.globalModel;
     }
