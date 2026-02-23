@@ -221,6 +221,9 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
                 <SelectItem value="CosineSimilarity">
                   <span className="font-medium">Cosine Similarity</span>
                 </SelectItem>
+                <SelectItem value="Alexandre">
+                  <span className="font-medium">Alexandre</span>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

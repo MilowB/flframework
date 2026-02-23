@@ -69,3 +69,4 @@ export const applyAssignment = (
 export * from './oneNN';
 export * from './probabilistic';
 export * from './cosineSimilarity';
+export * from './alexandre';
