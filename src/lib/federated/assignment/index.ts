@@ -6,6 +6,35 @@ import { getModelForAlexandre, type AlexandreContext } from './alexandre';
 
 export type AssignmentMethod = '1NN' | 'Probabiliste' | 'CosineSimilarity' | 'Alexandre';
 
+// Store for tracking unhappy clients (detected by Alexandre strategy when returning global model)
+let unHappyClientsStore: Set<string> = new Set();
+// Flag to ensure spectral clustering is only applied once after detection
+let spectralClusteringAppliedOnce = false;
+
+export const recordUnHappyClient = (clientId: string): void => {
+  unHappyClientsStore.add(clientId);
+};
+
+export const getUnHappyClients = (): Set<string> => {
+  return new Set(unHappyClientsStore);
+};
+
+export const resetUnHappyClients = (): void => {
+  unHappyClientsStore.clear();
+};
+
+export const hasSpectralBeenApplied = (): boolean => {
+  return spectralClusteringAppliedOnce;
+};
+
+export const markSpectralAsApplied = (): void => {
+  spectralClusteringAppliedOnce = true;
+};
+
+export const resetSpectralAppliedFlag = (): void => {
+  spectralClusteringAppliedOnce = false;
+};
+
 export interface AssignmentContext {
     globalModel: ModelWeights;
     clusterModels?: ModelWeights[];
@@ -58,7 +87,6 @@ export const applyAssignment = (
                 context.globalModel
             );
         case 'Alexandre': {
-            console.log("Ca passe ? : " + context.alexandreContext);
             if (!context.alexandreContext) return context.globalModel;
             return getModelForAlexandre(client.id, context.alexandreContext);
         }

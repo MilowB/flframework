@@ -1,6 +1,7 @@
 import type { ModelWeights } from '../types';
-import { computeCosineSimilarity } from '../models/mlp';
 import { getModelFor1NN } from './oneNN';
+import { findMostApproachedCluster } from './cosineSimilarity';
+import { recordUnHappyClient } from './index';
 
 export interface AlexandreContext {
   /** Gradient norms per client for current round (clientId -> norm) */
@@ -17,6 +18,10 @@ export interface AlexandreContext {
   clientGradients: Record<string, number[]>;
   /** Distance/similarity matrix between all participating clients (indices match participatingClients order) */
   distanceMatrix: number[][] | undefined;
+  /** Previous round distance matrix used to compute movement between rounds */
+  previousDistanceMatrix?: number[][];
+  /** Cluster membership used for approached-cluster detection */
+  clusters?: string[][];
   /** Ordered list of participating client IDs (matches distanceMatrix indices) */
   participatingClients: string[];
   /** Available cluster models */
@@ -40,9 +45,9 @@ export function getModelForAlexandre(
   const _cosineSimilarity = context.cosineSimilarities[clientId];
   const _clusterIdx = context.clusterAssignments[clientId];
   const _distanceMatrix = context.distanceMatrix;
+  const _previousDistanceMatrix = context.previousDistanceMatrix;
+  const _clusters = context.clusters;
   const _participatingClients = context.participatingClients;
-  // Index of this client in the distance matrix
-  const _clientMatrixIdx = _participatingClients.indexOf(clientId);
 
   // TODO: Implement assignment logic using gradientNorm and cosineSimilarity
   // Available data:
@@ -83,7 +88,12 @@ export function getModelForAlexandre(
   console.log("vi: " + vi);
   console.log("vj: " + vj);
 
-  if (cosine > 0) {
+  if (cosine > 0 && vi > 0 && vj > 0) {
+    const memberCount: number = _clusters && _clusters[_clusterIdx]
+      ? _clusters[_clusterIdx].length
+      : _participatingClients.filter(id => context.clusterAssignments[id] === _clusterIdx).length;
+
+    console.log(`Nombre de membres dans le cluster ${_clusterIdx}: ${memberCount}`);
     // Sa = cosine_similarity * (Vi + Vj) / (2 * max(vi, vj, ...))
     const sa = cosine * (vi + vj) / (2 * maxV);
     console.log("sa: " + sa);
@@ -104,15 +114,42 @@ export function getModelForAlexandre(
     const threshold = 0.5;
     console.log("sm: " + sm);
 
+    
     if (sm < threshold) {
       console.log("Client mécontent détecté, il va être réaffecté à un nouveau cluster.")
-      console.log("Affectation: envoi du modèle global au client.");
-      return context.globalModel;
-    }
 
+      recordUnHappyClient(clientId);
+
+      const approachedClusterResult =
+        _distanceMatrix && _previousDistanceMatrix && _clusters
+          ? findMostApproachedCluster(
+            clientId,
+            _distanceMatrix,
+            _previousDistanceMatrix,
+            _clusters,
+            _participatingClients
+          )
+          : null;
+
+      const bestCluster = approachedClusterResult?.clusterId;
+
+      if (bestCluster !== undefined && bestCluster >= 0 && clusterModels[bestCluster]) {
+        console.log(
+          `Réaffectation Alexandre: ${clientId} vers cluster ${bestCluster} (avg change: ${approachedClusterResult?.avgDistanceChange.toFixed(4)})`
+        );
+        return clusterModels[bestCluster];
+      }
+
+      if (_clusterIdx >= 0 && _clusterIdx < clusterModels.length) {
+        return clusterModels[_clusterIdx];
+      }
+
+      return getModelFor1NN(clientId, context.globalModel);
+    }
+    
     // sm ≤ threshold or no better cluster found: stay with current cluster model
     if (_clusterIdx >= 0 && _clusterIdx < clusterModels.length) {
-      return clusterModels[_clusterIdx];
+      return getModelFor1NN(clientId, context.globalModel);
     }
   }
   console.log("Retour 1NN");

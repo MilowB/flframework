@@ -21,7 +21,7 @@ import { simulateClientTraining, selectClients, createClient } from './clients/t
 import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
-import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores, type AlexandreContext } from './assignment';
+import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores, getUnHappyClients, resetUnHappyClients, type AlexandreContext } from './assignment';
 
 import {
   pca3D_single
@@ -204,6 +204,8 @@ export const runFederatedRound = async (
         clientGradients: alexandreClientGradients,
         clusterAssignments,
         distanceMatrix: prevRoundMetrics.distanceMatrix,
+        previousDistanceMatrix: currentRound >= 2 ? state.roundHistory[currentRound - 2]?.distanceMatrix : undefined,
+        clusters: prevClusters,
         participatingClients: prevRoundMetrics.participatingClients,
         clusterModels: alexandreClusterModels,
         globalModel,
@@ -656,6 +658,8 @@ export const runFederatedRound = async (
           clustersForRound.flatMap((members, idx) => members.map(id => [id, idx]))
         ),
         distanceMatrix: distanceMatrixForRound,
+        previousDistanceMatrix: currentRound >= 1 ? state.roundHistory[currentRound - 1]?.distanceMatrix : undefined,
+        clusters: clustersForRound,
         participatingClients: participatingIds,
         clusterModels: alexandreClusterModels,
         globalModel,

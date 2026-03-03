@@ -150,7 +150,7 @@ export const getClientDataSubset = (
       primaryLabel = found;
     }
 
-    const primaryCount = Math.floor(numSamples * 0.4); // @debug, devrait être à 0.7 pour 70%
+    const primaryCount = Math.floor(numSamples * 0.7); // @debug, devrait être à 0.7 pour 70%
     const randomCount = numSamples - primaryCount;
 
     const seededShuffle = <T,>(arr: T[], seed: number) => {
