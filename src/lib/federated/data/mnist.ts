@@ -108,7 +108,7 @@ export const getClientDataSubset = (
   numSamples: number,
   nonIID: boolean = true,
   seed: number = 42,
-  distributionMode: 'pairs' | 'groups' = 'pairs'
+  distributionMode: 'pairs' | 'groups' = 'groups'
 ): { inputs: number[][]; outputs: number[][] } => {
   const inputs: number[][] = [];
   const outputs: number[][] = [];

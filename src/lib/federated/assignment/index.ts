@@ -58,6 +58,7 @@ export const applyAssignment = (
                 context.globalModel
             );
         case 'Alexandre': {
+            console.log("Ca passe ? : " + context.alexandreContext);
             if (!context.alexandreContext) return context.globalModel;
             return getModelForAlexandre(client.id, context.alexandreContext);
         }

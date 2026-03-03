@@ -21,7 +21,7 @@ import { simulateClientTraining, selectClients, createClient } from './clients/t
 import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
-import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores } from './assignment';
+import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores, type AlexandreContext } from './assignment';
 
 import {
   pca3D_single
@@ -64,6 +64,22 @@ export const initializeModel = (architecture: string): ModelWeights => {
  * @param clustersForRound Clusters from previous round (optional)
  * @returns [RoundMetrics, clustersForRound]
  */
+
+// Compute element-wise median of a list of gradient vectors
+const computeMedianGradient = (gradients: number[][]): number[] => {
+  if (gradients.length === 0) return [];
+  if (gradients.length === 1) return gradients[0];
+  const dim = gradients[0].length;
+  const median = new Array(dim);
+  for (let d = 0; d < dim; d++) {
+    const values = gradients.map(g => g[d]).sort((a, b) => a - b);
+    const mid = Math.floor(values.length / 2);
+    median[d] = values.length % 2 === 0
+      ? (values[mid - 1] + values[mid]) / 2
+      : values[mid];
+  }
+  return median;
+};
 
 // DEBUG flag for RNG state tracking - set to true to diagnose reproducibility issues
 const DEBUG_RNG_STATE = false;
@@ -131,6 +147,69 @@ export const runFederatedRound = async (
   // Pre-Phase 2: Detect cosine similarity drops and compute immediate reassignments
   // This happens BEFORE sending models so clients receive the correct cluster model
   const immediateReassignments: Map<string, number> = new Map();
+  let alexandreContextForRound: AlexandreContext | undefined;
+  let previousClusterModels: Map<number, ModelWeights> = new Map();
+  
+  // Build alexandreContext from PREVIOUS round (N-1) data before Phase 2
+  if (serverConfig.modelAssignmentMethod === 'Alexandre' && currentRound >= 1) {
+    const prevRoundMetrics = state.roundHistory[currentRound - 1];
+    if (prevRoundMetrics?.clusters && prevRoundMetrics.clientMetrics) {
+      const prevClusters = prevRoundMetrics.clusters;
+      const prevClientMetrics = prevRoundMetrics.clientMetrics;
+      
+      // Extract data from previous round
+      const alexandreGradientNorms: Record<string, number> = {};
+      const alexandreCosineSims: Record<string, number> = {};
+      const alexandreClientGradients: Record<string, number[]> = {};
+      
+      for (const cm of prevClientMetrics) {
+        alexandreGradientNorms[cm.clientId] = cm.gradientNorm || 0;
+        // Use previous-round cosine similarity (avg similarity with cluster members)
+        alexandreCosineSims[cm.clientId] = cm.clusterCosineSimilarity ?? 0;
+        // Note: client gradients not stored in RoundMetrics, will be empty
+      }
+      
+      const clusterAssignments: Record<string, number> = {};
+      prevClusters.forEach((members, idx) => {
+        members.forEach(clientId => { clusterAssignments[clientId] = idx; });
+      });
+      
+      const alexandreClusterModels = prevClusters.map((_, idx) =>
+        clusterModelStore.get(`cluster-${idx}`) || globalModel
+      );
+      
+      // Compute cluster gradient norms using N-1 and N-2 cluster models
+      const clusterGradientNorms: Record<number, number> = {};
+      if (currentRound >= 2) {
+        const prevPrevRoundMetrics = state.roundHistory[currentRound - 2];
+        if (prevRoundMetrics.clusterMetrics && prevPrevRoundMetrics?.clusterMetrics) {
+          for (let c = 0; c < prevClusters.length; c++) {
+            const clusterN1 = prevRoundMetrics.clusterMetrics.find(cm => cm.clusterId === c);
+            const clusterN2 = prevPrevRoundMetrics.clusterMetrics.find(cm => cm.clusterId === c);
+            if (clusterN1?.weights && clusterN2?.weights) {
+              const delta = computeModelDelta(clusterN1.weights, clusterN2.weights);
+              clusterGradientNorms[c] = Math.sqrt(delta.reduce((s, v) => s + v * v, 0));
+            } else {
+              clusterGradientNorms[c] = 0;
+            }
+          }
+        }
+      }
+      
+      alexandreContextForRound = {
+        gradientNorms: alexandreGradientNorms,
+        cosineSimilarities: alexandreCosineSims,
+        clusterGradientNorms,
+        clusterMedianGradients: {},
+        clientGradients: alexandreClientGradients,
+        clusterAssignments,
+        distanceMatrix: prevRoundMetrics.distanceMatrix,
+        participatingClients: prevRoundMetrics.participatingClients,
+        clusterModels: alexandreClusterModels,
+        globalModel,
+      };
+    }
+  }
   
   if (serverConfig.modelAssignmentMethod === 'CosineSimilarity' && currentRound >= 2) {
     // Get distance matrices from previous rounds
@@ -212,6 +291,7 @@ export const runFederatedRound = async (
             selectedClients,
             round: currentRound,
             distanceMetric: serverConfig.distanceMetric,
+            alexandreContext: alexandreContextForRound,
           }
         );
       }
@@ -228,6 +308,7 @@ export const runFederatedRound = async (
           selectedClients,
           round: currentRound,
           distanceMetric: serverConfig.distanceMetric,
+          alexandreContext: alexandreContextForRound,
         }
       );
     }
@@ -362,6 +443,12 @@ export const runFederatedRound = async (
     if (clustersForRound && clustersForRound.length > 0) {
       const clientMap = new Map(clientResultsWithIds.map(c => [c.id, c]));
 
+      // Snapshot cluster models from previous round (N-1) before overwriting
+      for (let clusterIdx = 0; clusterIdx < clustersForRound.length; clusterIdx++) {
+        const prev = clusterModelStore.get(`cluster-${clusterIdx}`);
+        if (prev) previousClusterModels.set(clusterIdx, prev);
+      }
+
       for (let clusterIdx = 0; clusterIdx < clustersForRound.length; clusterIdx++) {
         const grp = clustersForRound[clusterIdx];
         const entries = grp.map(id => clientMap.get(id)).filter(Boolean) as typeof clientResultsWithIds;
@@ -474,6 +561,105 @@ export const runFederatedRound = async (
       
       // Note: Reassignment detection is now done BEFORE training (Pre-Phase 2)
       // so clients receive the correct model immediately at the current round
+    }
+
+    // Build alexandreContext: cosine similarity of each client with median gradient of its cluster
+    if (clustersForRound && clustersForRound.length > 0) {
+      const clientMap = new Map(clientResultsWithIds.map(c => [c.id, c]));
+      const selectedClientsMap = new Map(selectedClients.map(c => [c.id, c]));
+
+      // Step 1: collect gradient vectors per cluster
+      const clusterGradients: Map<number, { clientId: string; delta: number[] }[]> = new Map();
+      for (let c = 0; c < clustersForRound.length; c++) clusterGradients.set(c, []);
+      const alexandreClientGradients: Record<string, number[]> = {};
+
+      for (const { result, client } of trainedClients) {
+        const prevModel = client.localModelHistory?.[1];
+        if (!prevModel) continue;
+        const delta = computeModelDelta(result.weights, prevModel);
+        alexandreClientGradients[client.id] = delta;
+        for (let c = 0; c < clustersForRound.length; c++) {
+          if (clustersForRound[c].includes(client.id)) {
+            clusterGradients.get(c)!.push({ clientId: client.id, delta });
+            break;
+          }
+        }
+      }
+
+      // Step 2: compute median gradient per cluster
+      const clusterMedians: Map<number, number[]> = new Map();
+      for (const [c, entries] of clusterGradients) {
+        if (entries.length > 0) {
+          clusterMedians.set(c, computeMedianGradient(entries.map(e => e.delta)));
+        }
+      }
+
+      // Step 3: compute cosine similarity of each client with its cluster median
+      const alexandreCosineSims: Record<string, number> = {};
+      const alexandreGradientNorms: Record<string, number> = {};
+
+      for (const { result, client } of trainedClients) {
+        const prevModel = client.localModelHistory?.[1];
+        if (!prevModel) {
+          alexandreCosineSims[client.id] = 0;
+          alexandreGradientNorms[client.id] = 0;
+          continue;
+        }
+        const delta = computeModelDelta(result.weights, prevModel);
+        // gradient norm (L2)
+        const norm = Math.sqrt(delta.reduce((s, v) => s + v * v, 0));
+        alexandreGradientNorms[client.id] = norm;
+
+        // find cluster index
+        let clientClusterIdx = -1;
+        for (let c = 0; c < clustersForRound.length; c++) {
+          if (clustersForRound[c].includes(client.id)) { clientClusterIdx = c; break; }
+        }
+        const median = clusterMedians.get(clientClusterIdx);
+        if (!median || median.length === 0) {
+          alexandreCosineSims[client.id] = 0;
+          continue;
+        }
+        alexandreCosineSims[client.id] = computeCosineSimilarity(delta, median);
+      }
+
+      // Build cluster models array aligned with clustersForRound indices
+      const alexandreClusterModels = clustersForRound.map((_, idx) =>
+        clusterModelStore.get(`cluster-${idx}`) || globalModel
+      );
+
+      // Compute gradient norms of cluster centroïds (delta between round N-1 and N centroid)
+      const clusterGradientNorms: Record<number, number> = {};
+      for (let c = 0; c < clustersForRound.length; c++) {
+        const prevCentroid = previousClusterModels.get(c);
+        const newCentroid = clusterModelStore.get(`cluster-${c}`);
+        if (prevCentroid && newCentroid) {
+          const delta = computeModelDelta(newCentroid, prevCentroid);
+          clusterGradientNorms[c] = Math.sqrt(delta.reduce((s, v) => s + v * v, 0));
+        } else {
+          clusterGradientNorms[c] = 0;
+        }
+      }
+
+      const alexandreClusterMedianGradients: Record<number, number[]> = {};
+      for (const [c, median] of clusterMedians) {
+        alexandreClusterMedianGradients[c] = median;
+      }
+
+      alexandreContextForRound = {
+        gradientNorms: alexandreGradientNorms,
+        cosineSimilarities: alexandreCosineSims,
+        clusterGradientNorms,
+        clusterMedianGradients: alexandreClusterMedianGradients,
+        clientGradients: alexandreClientGradients,
+        clusterAssignments: Object.fromEntries(
+          clustersForRound.flatMap((members, idx) => members.map(id => [id, idx]))
+        ),
+        distanceMatrix: distanceMatrixForRound,
+        participatingClients: participatingIds,
+        clusterModels: alexandreClusterModels,
+        globalModel,
+      };
     }
   } catch (err) {
     console.warn('Clustering failed:', err);
