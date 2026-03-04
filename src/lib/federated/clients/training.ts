@@ -58,8 +58,9 @@ export const isCNNArchitecture = (architecture: string): boolean => {
 export const generateClientTestData = (clientId: string, trainDataSize: number): void => {
   if (clientTestDataStore.has(clientId) || !mnistTestData) return;
 
+  const { distributionConfig } = await import('../core/stores');
   const testSize = Math.max(50, Math.floor(trainDataSize * 0.2));
-  const testSubset = getClientDataSubset(mnistTestData, clientId, testSize, true, getSeed(), 'groups', 'test');
+  const testSubset = getClientDataSubset(mnistTestData, clientId, testSize, true, getSeed(), 'groups', 'test', distributionConfig.type, distributionConfig.dirichletAlpha);
   clientTestDataStore.set(clientId, testSubset);
 };
 
