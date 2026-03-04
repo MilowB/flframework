@@ -135,8 +135,10 @@ const IndexContent = () => {
         <DatasetPanel
           dataset={dataset}
           distribution={distribution}
+          dirichletAlpha={dirichletAlpha}
           onDatasetChange={setDataset}
           onDistributionChange={setDistribution}
+          onDirichletAlphaChange={setDirichletAlpha}
           disabled={state.isRunning}
         />
 
