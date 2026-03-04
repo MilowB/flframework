@@ -127,6 +127,9 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
   }, []);
 
   const startTraining = useCallback(async () => {
+    // Set distribution config before training
+    setDistributionConfig(distributionType || '70-30', dirichletAlpha ?? 0.5);
+
     // Initialize model synchronously if not present
     let currentGlobalModel = state.globalModel;
     if (!currentGlobalModel) {
