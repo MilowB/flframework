@@ -21,6 +21,7 @@ import FiftyFiftyPanel from '@/components/federated/FiftyFiftyPanel';
 import KmeansPanel from '@/components/federated/KmeansPanel';
 import SpectralPanel from '@/components/federated/SpectralPanel';
 import DatasetPanel, { DatasetType, DistributionType } from '@/components/federated/DatasetPanel';
+import ByzantinePanel, { ByzantineAttack } from '@/components/federated/ByzantinePanel';
 
 
 const IndexContent = () => {
