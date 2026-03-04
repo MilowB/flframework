@@ -27,6 +27,13 @@ export const clusterModelStore: Map<string, ModelWeights> = new Map();
 export const cosineHistoryStore: Map<string, number[]> = new Map();
 export const gradientNormHistoryStore: Map<string, number[]> = new Map();
 
+// Distribution config (set from UI before training starts)
+export let distributionConfig: { type: '70-30' | 'dirichlet'; dirichletAlpha: number } = { type: '70-30', dirichletAlpha: 0.5 };
+
+export const setDistributionConfig = (type: '70-30' | 'dirichlet', dirichletAlpha: number = 0.5): void => {
+  distributionConfig = { type, dirichletAlpha };
+};
+
 // Getter for client models (used by save feature)
 export const getClientModels = (): Map<string, ModelWeights> => {
   return new Map(clusterModelStore);

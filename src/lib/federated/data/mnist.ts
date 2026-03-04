@@ -138,6 +138,48 @@ export const getClientGroupIndex = (
   }
 };
 
+// Sample from a Dirichlet distribution using Gamma samples
+const sampleDirichlet = (alpha: number[], seed: number): number[] => {
+  // Marsaglia and Tsang's method for Gamma(alpha, 1)
+  let s = seed >>> 0 || 1;
+  const rnd = () => {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    return (s >>> 0) / 4294967296;
+  };
+  // Box-Muller for normal
+  const randn = () => {
+    const u1 = rnd();
+    const u2 = rnd();
+    return Math.sqrt(-2 * Math.log(u1 + 1e-30)) * Math.cos(2 * Math.PI * u2);
+  };
+
+  const sampleGamma = (a: number): number => {
+    if (a < 1) {
+      // Gamma(a) = Gamma(a+1) * U^(1/a)
+      return sampleGamma(a + 1) * Math.pow(rnd() + 1e-30, 1 / a);
+    }
+    const d = a - 1 / 3;
+    const c = 1 / Math.sqrt(9 * d);
+    while (true) {
+      let x: number, v: number;
+      do {
+        x = randn();
+        v = 1 + c * x;
+      } while (v <= 0);
+      v = v * v * v;
+      const u = rnd();
+      if (u < 1 - 0.0331 * (x * x) * (x * x)) return d * v;
+      if (Math.log(u + 1e-30) < 0.5 * x * x + d * (1 - v + Math.log(v + 1e-30))) return d * v;
+    }
+  };
+
+  const samples = alpha.map(a => sampleGamma(a));
+  const sum = samples.reduce((a, b) => a + b, 0);
+  return samples.map(x => x / sum);
+};
+
 // Get a random subset of MNIST for a client (non-IID simulation)
 export const getClientDataSubset = (
   data: MNISTData,
@@ -146,87 +188,161 @@ export const getClientDataSubset = (
   nonIID: boolean = true,
   seed: number = 42,
   distributionMode: 'pairs' | 'groups' = 'groups',
-  dataType: 'train' | 'test' = 'train'
+  dataType: 'train' | 'test' = 'train',
+  distributionType: '70-30' | 'dirichlet' = '70-30',
+  dirichletAlpha: number = 0.5
 ): { inputs: number[][]; outputs: number[][] } => {
   const inputs: number[][] = [];
   const outputs: number[][] = [];
-  
-  if (nonIID) {
-    // Non-IID: each client has 70% of its train data of ONE label
-    let clientIndex = 0;
-    const m = clientId.match(/client-(\d+)/);
-    if (m) clientIndex = Number(m[1]);
-    else clientIndex = clientId.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7) & 0xffffffff;
 
-    let groupIndex: number;
-    if (distributionMode === 'groups') {
-      // Distribution par groupes: (0,1,2), (3,4,5), (6,7,8,9)
-      if (clientIndex <= 2) groupIndex = 0;
-      else if (clientIndex <= 5) groupIndex = 1;
-      else groupIndex = 2;
-    } else {
-      // Distribution par paires (comportement par défaut)
-      groupIndex = Math.floor(clientIndex / 2);
-    }
+  // Parse client index
+  let clientIndex = 0;
+  const m = clientId.match(/client-(\d+)/);
+  if (m) clientIndex = Number(m[1]);
+  else clientIndex = clientId.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7) & 0xffffffff;
 
-    const pairIndex = groupIndex;
-
-    let primaryLabel: number;
-    if (pairLabelMap.has(pairIndex)) {
-      primaryLabel = pairLabelMap.get(pairIndex)!;
-    } else {
-      const used = new Set(Array.from(pairLabelMap.values()));
-      let found = -1;
-      for (let l = 0; l < 10; l++) {
-        if (!used.has(l)) { found = l; break; }
-      }
-      if (found === -1) {
-        found = pairIndex % 10;
-        console.warn(`All labels already assigned to pairs; reusing label ${found} for pair ${pairIndex}`);
-      }
-      pairLabelMap.set(pairIndex, found);
-      primaryLabel = found;
-    }
-
-    const primaryCount = Math.floor(numSamples * 0.7); // @debug, devrait être à 0.7 pour 70%
-    const randomCount = numSamples - primaryCount;
-
-    const seededShuffle = <T,>(arr: T[], seed: number) => {
-      const a = arr.slice();
-      let s = seed >>> 0;
-      const rnd = () => {
-        s ^= s << 13;
-        s ^= s >>> 17;
-        s ^= s << 5;
-        return (s >>> 0) / 4294967295;
-      };
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(rnd() * (i + 1));
-        const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
-      }
-      return a;
+  const seededShuffle = <T,>(arr: T[], seed: number) => {
+    const a = arr.slice();
+    let s = seed >>> 0;
+    const rnd = () => {
+      s ^= s << 13;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      return (s >>> 0) / 4294967295;
     };
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  };
 
-    const primaryIndices = data.labels
-      .map((label, idx) => label === primaryLabel ? idx : -1)
-      .filter(idx => idx !== -1);
-
-    const shuffledPrimary = seededShuffle(primaryIndices, clientIndex + 1 + seed);
-    for (let i = 0; i < Math.min(primaryCount, shuffledPrimary.length); i++) {
-      const idx = shuffledPrimary[i];
+  if (!nonIID) {
+    // IID: uniform random sampling
+    const indices = Array.from({ length: data.labels.length }, (_, i) => i);
+    const shuffled = seededShuffle(indices, seed);
+    for (let i = 0; i < Math.min(numSamples, shuffled.length); i++) {
+      const idx = shuffled[i];
       inputs.push(data.images[idx]);
       outputs.push(oneHot(data.labels[idx]));
     }
+    return { inputs, outputs };
+  }
 
-    const allIndices = Array.from({ length: data.labels.length }, (_, i) => i);
-    const shuffledAll = seededShuffle(allIndices, clientIndex + 12345 + seed);
-    for (let i = 0; i < shuffledAll.length && inputs.length < numSamples; i++) {
-      const idx = shuffledAll[i];
-      inputs.push(data.images[idx]);
-      outputs.push(oneHot(data.labels[idx]));
+  if (distributionType === 'dirichlet') {
+    // Dirichlet non-IID distribution
+    const numClasses = 10;
+    // Each client gets a different Dirichlet sample using client-specific seed
+    const alphaVec = new Array(numClasses).fill(dirichletAlpha);
+    const proportions = sampleDirichlet(alphaVec, seed * 1000 + clientIndex + 1);
+
+    // Build per-class index pools
+    const classIndices: number[][] = Array.from({ length: numClasses }, () => []);
+    for (let i = 0; i < data.labels.length; i++) {
+      classIndices[data.labels[i]].push(i);
+    }
+    // Shuffle each class pool
+    for (let c = 0; c < numClasses; c++) {
+      classIndices[c] = seededShuffle(classIndices[c], seed + clientIndex + c);
     }
 
-    // Log distribution for this client (top 4 labels)
+    // Determine how many samples per class
+    const samplesPerClass = proportions.map(p => Math.max(1, Math.round(p * numSamples)));
+    // Adjust total to match numSamples
+    let total = samplesPerClass.reduce((a, b) => a + b, 0);
+    while (total > numSamples) {
+      const maxIdx = samplesPerClass.indexOf(Math.max(...samplesPerClass));
+      samplesPerClass[maxIdx]--;
+      total--;
+    }
+    while (total < numSamples) {
+      const minIdx = samplesPerClass.indexOf(Math.min(...samplesPerClass));
+      samplesPerClass[minIdx]++;
+      total++;
+    }
+
+    // Collect samples
+    const classPointers = new Array(numClasses).fill(0);
+    for (let c = 0; c < numClasses; c++) {
+      for (let i = 0; i < samplesPerClass[c]; i++) {
+        const idx = classIndices[c][classPointers[c] % classIndices[c].length];
+        classPointers[c]++;
+        inputs.push(data.images[idx]);
+        outputs.push(oneHot(data.labels[idx]));
+      }
+    }
+
+    // Log distribution
+    if (dataType === 'train') {
+      const labelCounts: Record<number, number> = {};
+      for (const output of outputs) {
+        const label = output.indexOf(1);
+        labelCounts[label] = (labelCounts[label] || 0) + 1;
+      }
+      const sortedLabels = Object.entries(labelCounts)
+        .map(([label, count]) => ({ label: parseInt(label), count, percentage: (count / outputs.length) * 100 }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 4);
+      const dist = sortedLabels.map(({ label, percentage }) => `${label}:${percentage.toFixed(1)}%`).join(', ');
+      console.log(`${clientId} [dirichlet α=${dirichletAlpha}] {${dist}}`);
+    }
+
+    return { inputs, outputs };
+  }
+
+  // Original 70-30 non-IID distribution
+  let groupIndex: number;
+  if (distributionMode === 'groups') {
+    if (clientIndex <= 2) groupIndex = 0;
+    else if (clientIndex <= 5) groupIndex = 1;
+    else groupIndex = 2;
+  } else {
+    groupIndex = Math.floor(clientIndex / 2);
+  }
+
+  const pairIndex = groupIndex;
+
+  let primaryLabel: number;
+  if (pairLabelMap.has(pairIndex)) {
+    primaryLabel = pairLabelMap.get(pairIndex)!;
+  } else {
+    const used = new Set(Array.from(pairLabelMap.values()));
+    let found = -1;
+    for (let l = 0; l < 10; l++) {
+      if (!used.has(l)) { found = l; break; }
+    }
+    if (found === -1) {
+      found = pairIndex % 10;
+      console.warn(`All labels already assigned to pairs; reusing label ${found} for pair ${pairIndex}`);
+    }
+    pairLabelMap.set(pairIndex, found);
+    primaryLabel = found;
+  }
+
+  const primaryCount = Math.floor(numSamples * 0.7);
+  const randomCount = numSamples - primaryCount;
+
+  const primaryIndices = data.labels
+    .map((label, idx) => label === primaryLabel ? idx : -1)
+    .filter(idx => idx !== -1);
+
+  const shuffledPrimary = seededShuffle(primaryIndices, clientIndex + 1 + seed);
+  for (let i = 0; i < Math.min(primaryCount, shuffledPrimary.length); i++) {
+    const idx = shuffledPrimary[i];
+    inputs.push(data.images[idx]);
+    outputs.push(oneHot(data.labels[idx]));
+  }
+
+  const allIndices = Array.from({ length: data.labels.length }, (_, i) => i);
+  const shuffledAll = seededShuffle(allIndices, clientIndex + 12345 + seed);
+  for (let i = 0; i < shuffledAll.length && inputs.length < numSamples; i++) {
+    const idx = shuffledAll[i];
+    inputs.push(data.images[idx]);
+    outputs.push(oneHot(data.labels[idx]));
+  }
+
+  // Log distribution for this client
+  if (dataType === 'train') {
     const labelCounts: Record<number, number> = {};
     for (const output of outputs) {
       const label = output.indexOf(1);
@@ -236,38 +352,9 @@ export const getClientDataSubset = (
       .map(([label, count]) => ({ label: parseInt(label), count, percentage: (count / outputs.length) * 100 }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 4);
-    const distribution = sortedLabels
-      .map(({ label, percentage }) => `${label}:${percentage.toFixed(1)}%`)
-      .join(', ');
-    if (distribution && dataType === 'train') {
-      console.log(`${clientId} [group ${pairIndex}→label ${primaryLabel}] {${distribution}}`);
-    }
-  } else {
-    // IID: uniform random sampling
-    const indices = Array.from({ length: data.labels.length }, (_, i) => i);
-    const seededShuffleIID = <T,>(arr: T[], seed: number) => {
-      const a = arr.slice();
-      let s = seed >>> 0;
-      const rnd = () => {
-        s ^= s << 13;
-        s ^= s >>> 17;
-        s ^= s << 5;
-        return (s >>> 0) / 4294967295;
-      };
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(rnd() * (i + 1));
-        const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
-      }
-      return a;
-    };
-    const shuffledIID = seededShuffleIID(indices, seed);
-    
-    for (let i = 0; i < Math.min(numSamples, shuffledIID.length); i++) {
-      const idx = shuffledIID[i];
-      inputs.push(data.images[idx]);
-      outputs.push(oneHot(data.labels[idx]));
-    }
+    const dist = sortedLabels.map(({ label, percentage }) => `${label}:${percentage.toFixed(1)}%`).join(', ');
+    console.log(`${clientId} [group ${pairIndex}→label ${primaryLabel}] {${dist}}`);
   }
-  
+
   return { inputs, outputs };
 };

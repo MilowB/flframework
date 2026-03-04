@@ -32,6 +32,7 @@ const IndexContent = () => {
   const [spectral, setSpectral] = useState({ numClusters: 3 });
   const [dataset, setDataset] = useState<DatasetType>('mnist');
   const [distribution, setDistribution] = useState<DistributionType>('70-30');
+  const [dirichletAlpha, setDirichletAlpha] = useState(0.5);
   const {
     state,
     mnistLoaded,
@@ -43,7 +44,7 @@ const IndexContent = () => {
     setClientCount,
     updateServerConfig,
     loadExperiment,
-  } = useFederatedLearning(6, gravity, none, fiftyFifty);
+  } = useFederatedLearning(6, gravity, none, fiftyFifty, distribution, dirichletAlpha);
   const [gravityCollapsed, setGravityCollapsed] = useState(false);
   const [kmeansCollapsed, setKmeansCollapsed] = useState(false);
   const [spectralCollapsed, setSpectralCollapsed] = useState(false);
@@ -134,8 +135,10 @@ const IndexContent = () => {
         <DatasetPanel
           dataset={dataset}
           distribution={distribution}
+          dirichletAlpha={dirichletAlpha}
           onDatasetChange={setDataset}
           onDistributionChange={setDistribution}
+          onDirichletAlphaChange={setDirichletAlpha}
           disabled={state.isRunning}
         />
 

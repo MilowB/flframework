@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { FederatedState, ClientState, ServerConfig, ServerStatus, ModelWeights } from '@/lib/federated/types';
-import { initializeModel, createClient, runFederatedRound, preloadMNIST, getClientModels, setClientModels, setSeed } from '@/lib/federated/simulation';
+import { initializeModel, createClient, runFederatedRound, preloadMNIST, getClientModels, setClientModels, setSeed, setDistributionConfig } from '@/lib/federated/simulation';
 import { ExperimentData } from '@/lib/federated/experimentStorage';
 import { Model3DPosition } from '@/lib/federated/visualization/pca';
 // import { useStrategyHyperparams } from '@/components/federated/StrategyHyperparamsContext';
@@ -52,7 +52,7 @@ function getActiveDynamicDataChanges(hyperparamsByStrategy: Record<string, any>,
   return [];
 }
 
-export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, ...otherStrategies: any[]) => {
+export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, distributionType?: '70-30' | 'dirichlet', dirichletAlpha?: number, ...otherStrategies: any[]) => {
   const [state, setState] = useState<FederatedState>(() => ({
     isRunning: false,
     currentRound: 0,
@@ -127,6 +127,9 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
   }, []);
 
   const startTraining = useCallback(async () => {
+    // Set distribution config before training
+    setDistributionConfig(distributionType || '70-30', dirichletAlpha ?? 0.5);
+
     // Initialize model synchronously if not present
     let currentGlobalModel = state.globalModel;
     if (!currentGlobalModel) {

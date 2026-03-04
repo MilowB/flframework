@@ -9,7 +9,8 @@ import {
   clientTestDataStore,
   mnistTrainData,
   mnistTestData,
-  setMnistTrainData
+  setMnistTrainData,
+  distributionConfig
 } from '../core/stores';
 import {
   unflattenWeights,
@@ -59,7 +60,7 @@ export const generateClientTestData = (clientId: string, trainDataSize: number):
   if (clientTestDataStore.has(clientId) || !mnistTestData) return;
 
   const testSize = Math.max(50, Math.floor(trainDataSize * 0.2));
-  const testSubset = getClientDataSubset(mnistTestData, clientId, testSize, true, getSeed(), 'groups', 'test');
+  const testSubset = getClientDataSubset(mnistTestData, clientId, testSize, true, getSeed(), 'groups', 'test', distributionConfig.type, distributionConfig.dirichletAlpha);
   clientTestDataStore.set(clientId, testSubset);
 };
 
@@ -215,7 +216,7 @@ export const simulateClientTraining = async (
 
   // Get or generate client-specific MNIST subset (non-IID) using global seed
   if (!clientDataStore.has(client.id)) {
-    clientDataStore.set(client.id, getClientDataSubset(trainData, client.id, client.dataSize, true, getSeed()));
+    clientDataStore.set(client.id, getClientDataSubset(trainData, client.id, client.dataSize, true, getSeed(), 'groups', 'train', distributionConfig.type, distributionConfig.dirichletAlpha));
   }
 
   // Generate client-specific test data if not already done
@@ -337,7 +338,7 @@ export const simulateCNNClientTraining = async (
 
   // Get or generate client-specific MNIST subset (non-IID) using global seed
   if (!clientDataStore.has(client.id)) {
-    clientDataStore.set(client.id, getClientDataSubset(trainData, client.id, client.dataSize, true, getSeed()));
+    clientDataStore.set(client.id, getClientDataSubset(trainData, client.id, client.dataSize, true, getSeed(), 'groups', 'train', distributionConfig.type, distributionConfig.dirichletAlpha));
   }
 
   // Generate client-specific test data if not already done
