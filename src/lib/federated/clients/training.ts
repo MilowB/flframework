@@ -9,7 +9,8 @@ import {
   clientTestDataStore,
   mnistTrainData,
   mnistTestData,
-  setMnistTrainData
+  setMnistTrainData,
+  distributionConfig
 } from '../core/stores';
 import {
   unflattenWeights,
