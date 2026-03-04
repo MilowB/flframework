@@ -338,7 +338,8 @@ export const simulateCNNClientTraining = async (
 
   // Get or generate client-specific MNIST subset (non-IID) using global seed
   if (!clientDataStore.has(client.id)) {
-    clientDataStore.set(client.id, getClientDataSubset(trainData, client.id, client.dataSize, true, getSeed()));
+    const { distributionConfig } = await import('../core/stores');
+    clientDataStore.set(client.id, getClientDataSubset(trainData, client.id, client.dataSize, true, getSeed(), 'groups', 'train', distributionConfig.type, distributionConfig.dirichletAlpha));
   }
 
   // Generate client-specific test data if not already done
