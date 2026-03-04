@@ -145,6 +145,16 @@ const IndexContent = () => {
           disabled={state.isRunning}
         />
 
+        {/* Byzantine Panel */}
+        <ByzantinePanel
+          byzantineCount={byzantineCount}
+          attackMethod={attackMethod}
+          onByzantineCountChange={setByzantineCount}
+          onAttackMethodChange={setAttackMethod}
+          disabled={state.isRunning}
+          maxClients={state.clients.length}
+        />
+
         {/* Main Grid - 3 columns */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Sidebar - Server Config */}
