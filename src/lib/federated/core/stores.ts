@@ -23,6 +23,10 @@ export const setMnistTestData = (data: MNISTData): void => {
 // Store per-client model to send (cluster-averaged). Keyed by client id.
 export const clusterModelStore: Map<string, ModelWeights> = new Map();
 
+// Store sm history per client for Alexandre strategy (clientId -> sm[])
+export const cosineHistoryStore: Map<string, number[]> = new Map();
+export const gradientNormHistoryStore: Map<string, number[]> = new Map();
+
 // Getter for client models (used by save feature)
 export const getClientModels = (): Map<string, ModelWeights> => {
   return new Map(clusterModelStore);
@@ -40,4 +44,6 @@ export const resetStores = (): void => {
   clientDataStore.clear();
   clientTestDataStore.clear();
   clusterModelStore.clear();
+  cosineHistoryStore.clear();
+  gradientNormHistoryStore.clear();
 };

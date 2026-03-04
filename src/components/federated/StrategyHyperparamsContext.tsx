@@ -8,6 +8,11 @@ export interface GravityHyperparams {
   dynamicClient?: number;
   receiverClient?: number;
   changeRound?: number;
+  dynamicDataChanges?: Array<{
+    dynamicClient?: number;
+    receiverClient?: number;
+    changeRound?: number;
+  }>;
 }
 
 export interface StrategyHyperparamsContextType {
@@ -21,6 +26,7 @@ export const defaultGravity: GravityHyperparams = {
   clusterWeight: 1e4,
   clientWeight: 10,
   dynamicData: false,
+  dynamicDataChanges: [{}],
 };
 
 export const StrategyHyperparamsContext = createContext<StrategyHyperparamsContextType | undefined>(undefined);

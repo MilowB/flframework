@@ -341,7 +341,7 @@ export const louvainPartitionWithRng = (A: number[][], rng: SeededRandom): numbe
       sumTot[oldC] -= k[i];
       let bestC = oldC;
       let bestDelta = 0;
-      const resolution = 2;
+      const resolution = 1;
 
       for (const [c, k_i_in] of neighCommWeights.entries()) {
         const deltaQ = (k_i_in - resolution * (k[i] * sumTot[c]) / (2 * m)) / (2 * m);

@@ -16,19 +16,40 @@ const defaultServerConfig: ServerConfig = {
   seed: 42,
 };
 
+type DynamicDataChange = {
+  dynamicClient?: number;
+  receiverClient?: number;
+  changeRound?: number;
+};
+
 // Utilitaire pour accès dynamique aux hyperparams dynamiques selon la stratégie sélectionnée
-function getActiveDynamicData(hyperparamsByStrategy: Record<string, any>, selectedStrategy: string) {
+function getActiveDynamicDataChanges(hyperparamsByStrategy: Record<string, any>, selectedStrategy: string): DynamicDataChange[] {
   const params = hyperparamsByStrategy[selectedStrategy];
+  if (!params || !params.dynamicData) {
+    return [];
+  }
+
+  if (Array.isArray(params.dynamicDataChanges)) {
+    return params.dynamicDataChanges.filter((entry: DynamicDataChange) => (
+      typeof entry?.dynamicClient === 'number' &&
+      typeof entry?.receiverClient === 'number' &&
+      typeof entry?.changeRound === 'number'
+    ));
+  }
+
   if (
-    params &&
-    params.dynamicData &&
     typeof params.dynamicClient === 'number' &&
     typeof params.receiverClient === 'number' &&
     typeof params.changeRound === 'number'
   ) {
-    return params;
+    return [{
+      dynamicClient: params.dynamicClient,
+      receiverClient: params.receiverClient,
+      changeRound: params.changeRound,
+    }];
   }
-  return undefined;
+
+  return [];
 }
 
 export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, ...otherStrategies: any[]) => {
@@ -160,43 +181,40 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
           fiftyFifty,
           // Ajoutez ici d'autres stratégies si besoin, ex: ...otherStrategies
         };
-        const dynamicParams = getActiveDynamicData(hyperparamsByStrategy, clientAggMethod);
-        if (
-          dynamicParams &&
-          round === dynamicParams.changeRound
-        ) {
-          // Map client numbers to array indices (1-based UI, 0-based array)
-          const dynamicIdx = dynamicParams.dynamicClient;
-          const receiverIdx = dynamicParams.receiverClient;
+        const dynamicChanges = getActiveDynamicDataChanges(hyperparamsByStrategy, clientAggMethod);
+        for (const change of dynamicChanges) {
+          if (round !== change.changeRound) continue;
+
+          const dynamicIdx = change.dynamicClient!;
+          const receiverIdx = change.receiverClient!;
           const clients = latest.clients;
           let errorMsg = '';
+
           if (
             dynamicIdx < 0 || dynamicIdx >= clients.length ||
             receiverIdx < 0 || receiverIdx >= clients.length ||
             dynamicIdx === receiverIdx
           ) {
-            errorMsg = 'Numéro de client invalide.';
+            errorMsg = `Numéro de client invalide (dynamique=${dynamicIdx}, source=${receiverIdx}).`;
           } else {
             const receiver = clients[receiverIdx];
             const dynamic = clients[dynamicIdx];
-            const transferKey = `${dynamic.id}|${round}`;
+            const transferKey = `${dynamic.id}|${receiver.id}|${round}`;
             if (!dynamicTransferDone.has(transferKey)) {
-              // Data stores are keyed by client.id
-              // Use clientDataStore and clientTestDataStore
-              // Import here to avoid circular deps
               const { clientDataStore, clientTestDataStore } = await import('@/lib/federated/core/stores');
               const train = clientDataStore.get(receiver.id);
               const test = clientTestDataStore.get(receiver.id);
               if (!train || !test) {
-                errorMsg = 'Données manquantes pour le client source.';
+                errorMsg = `Données manquantes pour le client source ${receiver.id}.`;
               } else {
-                console.log(`Changement de dataset du client ${dynamic.id} en le client ${receiver.id}`);
+                console.log(`Changement de dataset du client ${dynamic.id} avec le paquet du client ${receiver.id}`);
                 clientDataStore.set(dynamic.id, JSON.parse(JSON.stringify(train)));
                 clientTestDataStore.set(dynamic.id, JSON.parse(JSON.stringify(test)));
                 dynamicTransferDone.add(transferKey);
               }
             }
           }
+
           if (errorMsg) {
             toast({
               title: 'Erreur de transfert de données',

@@ -10,6 +10,11 @@ interface NoneHyperparams {
   dynamicClient?: number;
   receiverClient?: number;
   changeRound?: number;
+  dynamicDataChanges?: Array<{
+    dynamicClient?: number;
+    receiverClient?: number;
+    changeRound?: number;
+  }>;
 }
 
 interface NonePanelProps {
@@ -22,8 +27,34 @@ interface NonePanelProps {
 export const NonePanel: React.FC<NonePanelProps> = ({ value, onChange, collapsed = false, onCollapseToggle }) => {
   const [local, setLocal] = useState(value);
 
+  const getDynamicChanges = () => {
+    const changes = local.dynamicDataChanges;
+    return changes && changes.length > 0 ? changes : [{}];
+  };
+
   const handleChange = (field: keyof NoneHyperparams, val: any) => {
     const updated = { ...local, [field]: val };
+    setLocal(updated);
+    onChange(updated);
+  };
+
+  const updateDynamicChange = (index: number, field: 'dynamicClient' | 'receiverClient' | 'changeRound', val: number | undefined) => {
+    const changes = [...getDynamicChanges()];
+    changes[index] = { ...(changes[index] || {}), [field]: val };
+    const updated = { ...local, dynamicDataChanges: changes };
+    setLocal(updated);
+    onChange(updated);
+  };
+
+  const addDynamicChange = () => {
+    const updated = { ...local, dynamicDataChanges: [...getDynamicChanges(), {}] };
+    setLocal(updated);
+    onChange(updated);
+  };
+
+  const removeDynamicChange = (index: number) => {
+    const changes = getDynamicChanges().filter((_, idx) => idx !== index);
+    const updated = { ...local, dynamicDataChanges: changes.length > 0 ? changes : [{}] };
     setLocal(updated);
     onChange(updated);
   };
@@ -45,19 +76,31 @@ export const NonePanel: React.FC<NonePanelProps> = ({ value, onChange, collapsed
             <Label>Données dynamiques</Label>
           </div>
           {local.dynamicData && (
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Label>Numéro du client dynamique</Label>
-                <Input type="number" value={Number.isFinite(local.dynamicClient) ? local.dynamicClient : ''} onChange={e => handleChange('dynamicClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
-              </div>
-              <div className="flex-1">
-                <Label>Numéro du paquet de données</Label>
-                <Input type="number" value={Number.isFinite(local.receiverClient) ? local.receiverClient : ''} onChange={e => handleChange('receiverClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
-              </div>
-              <div className="flex-1">
-                <Label>Round de changement de données</Label>
-                <Input type="number" value={Number.isFinite(local.changeRound) ? local.changeRound : ''} onChange={e => handleChange('changeRound', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
-              </div>
+            <div className="space-y-3">
+              {getDynamicChanges().map((entry, idx) => (
+                <div key={`none-dynamic-${idx}`} className="grid grid-cols-12 gap-3 items-end">
+                  <div className="col-span-4">
+                    <Label>Numéro du client dynamique</Label>
+                    <Input type="number" value={Number.isFinite(entry.dynamicClient) ? entry.dynamicClient : ''} onChange={e => updateDynamicChange(idx, 'dynamicClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
+                  </div>
+                  <div className="col-span-4">
+                    <Label>Numéro du paquet de données</Label>
+                    <Input type="number" value={Number.isFinite(entry.receiverClient) ? entry.receiverClient : ''} onChange={e => updateDynamicChange(idx, 'receiverClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
+                  </div>
+                  <div className="col-span-3">
+                    <Label>Round de changement de données</Label>
+                    <Input type="number" value={Number.isFinite(entry.changeRound) ? entry.changeRound : ''} onChange={e => updateDynamicChange(idx, 'changeRound', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
+                  </div>
+                  <div className="col-span-1">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => removeDynamicChange(idx)}>
+                      Suppr.
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addDynamicChange}>
+                Ajouter un échange
+              </Button>
             </div>
           )}
         </CardContent>

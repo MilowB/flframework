@@ -19,11 +19,18 @@ import { saveExperiment, ExperimentData } from '@/lib/federated/experimentStorag
 import { SeededRandom } from '@/lib/federated/core/random';
 
 // Strategy hyperparameters types
+interface DynamicDataChange {
+  dynamicClient?: number;
+  receiverClient?: number;
+  changeRound?: number;
+}
+
 interface NoneHyperparams {
   dynamicData: boolean;
   dynamicClient?: number;
   receiverClient?: number;
   changeRound?: number;
+  dynamicDataChanges?: DynamicDataChange[];
 }
 
 interface FiftyFiftyHyperparams {
@@ -31,6 +38,7 @@ interface FiftyFiftyHyperparams {
   dynamicClient?: number;
   receiverClient?: number;
   changeRound?: number;
+  dynamicDataChanges?: DynamicDataChange[];
 }
 
 interface GravityHyperparams {
@@ -41,6 +49,7 @@ interface GravityHyperparams {
   dynamicClient?: number;
   receiverClient?: number;
   changeRound?: number;
+  dynamicDataChanges?: DynamicDataChange[];
 }
 
 interface StrategyHyperparams {
@@ -50,13 +59,14 @@ interface StrategyHyperparams {
 }
 
 const defaultStrategyHyperparams: StrategyHyperparams = {
-  none: { dynamicData: false },
-  fiftyFifty: { dynamicData: false },
+  none: { dynamicData: false, dynamicDataChanges: [{}] },
+  fiftyFifty: { dynamicData: false, dynamicDataChanges: [{}] },
   gravity: {
     gravitationConstant: 1.0,
     clusterWeight: 1.0,
     clientWeight: 1.0,
     dynamicData: false,
+    dynamicDataChanges: [{}],
   },
 };
 
@@ -165,6 +175,36 @@ const Benchmark = () => {
     return Array.from({ length: count }, () => rng.nextInt(100000));
   }, []);
 
+  const getActiveDynamicDataChanges = useCallback((
+    hyperparamsByStrategy: Record<string, any>,
+    selectedStrategy: string
+  ): DynamicDataChange[] => {
+    const params = hyperparamsByStrategy[selectedStrategy];
+    if (!params || !params.dynamicData) return [];
+
+    if (Array.isArray(params.dynamicDataChanges)) {
+      return params.dynamicDataChanges.filter((entry: DynamicDataChange) => (
+        typeof entry?.dynamicClient === 'number' &&
+        typeof entry?.receiverClient === 'number' &&
+        typeof entry?.changeRound === 'number'
+      ));
+    }
+
+    if (
+      typeof params.dynamicClient === 'number' &&
+      typeof params.receiverClient === 'number' &&
+      typeof params.changeRound === 'number'
+    ) {
+      return [{
+        dynamicClient: params.dynamicClient,
+        receiverClient: params.receiverClient,
+        changeRound: params.changeRound,
+      }];
+    }
+
+    return [];
+  }, []);
+
   const startBenchmark = useCallback(async () => {
     if (!mnistLoaded) {
       toast.error('MNIST non chargé');
@@ -217,11 +257,44 @@ const Benchmark = () => {
         };
 
         let clustersForRound: string[][] | undefined = undefined;
+        const dynamicTransferDone = new Set<string>();
 
         // Run rounds
         for (let round = 0; round < configWithSeed.totalRounds; round++) {
           if (abortRef.current) break;
           setCurrentRound(round + 1);
+
+          const clientAggMethod = state.serverConfig?.clientAggregationMethod || 'none';
+          const dynamicChanges = getActiveDynamicDataChanges(experiment.strategyHyperparams as Record<string, any>, clientAggMethod);
+          for (const change of dynamicChanges) {
+            if (round !== change.changeRound) continue;
+
+            const dynamicIdx = change.dynamicClient!;
+            const receiverIdx = change.receiverClient!;
+            const clientsForTransfer = state.clients;
+
+            if (
+              dynamicIdx < 0 || dynamicIdx >= clientsForTransfer.length ||
+              receiverIdx < 0 || receiverIdx >= clientsForTransfer.length ||
+              dynamicIdx === receiverIdx
+            ) {
+              continue;
+            }
+
+            const receiver = clientsForTransfer[receiverIdx];
+            const dynamic = clientsForTransfer[dynamicIdx];
+            const transferKey = `${dynamic.id}|${receiver.id}|${round}`;
+            if (dynamicTransferDone.has(transferKey)) continue;
+
+            const { clientDataStore, clientTestDataStore } = await import('@/lib/federated/core/stores');
+            const train = clientDataStore.get(receiver.id);
+            const test = clientTestDataStore.get(receiver.id);
+            if (!train || !test) continue;
+
+            clientDataStore.set(dynamic.id, JSON.parse(JSON.stringify(train)));
+            clientTestDataStore.set(dynamic.id, JSON.parse(JSON.stringify(test)));
+            dynamicTransferDone.add(transferKey);
+          }
 
           try {
             const [metrics, nextClusters] = await runFederatedRound(
@@ -263,7 +336,7 @@ const Benchmark = () => {
     if (!abortRef.current) {
       toast.success(`Benchmark terminé: ${averagedResults.length} expériences moyennées`);
     }
-  }, [experiments, masterSeed, seedCount, mnistLoaded, generateSeeds]);
+  }, [experiments, masterSeed, seedCount, mnistLoaded, generateSeeds, getActiveDynamicDataChanges]);
 
   const stopBenchmark = () => {
     abortRef.current = true;
@@ -606,6 +679,56 @@ const ExperimentPanel = ({
     });
   };
 
+  const getDynamicChanges = (strategy: 'none' | 'fiftyFifty' | 'gravity'): DynamicDataChange[] => {
+    const params = strategyHyperparams[strategy];
+    const changes = params.dynamicDataChanges;
+    return changes && changes.length > 0 ? changes : [{}];
+  };
+
+  const updateDynamicChange = (
+    strategy: 'none' | 'fiftyFifty' | 'gravity',
+    index: number,
+    field: keyof DynamicDataChange,
+    value: number | undefined
+  ) => {
+    const changes = [...getDynamicChanges(strategy)];
+    const entry = changes[index] ?? {};
+    changes[index] = { ...entry, [field]: value };
+
+    if (strategy === 'none') {
+      updateNoneParams({ dynamicDataChanges: changes });
+    } else if (strategy === 'fiftyFifty') {
+      updateFiftyFiftyParams({ dynamicDataChanges: changes });
+    } else {
+      updateGravityParams({ dynamicDataChanges: changes });
+    }
+  };
+
+  const addDynamicChange = (strategy: 'none' | 'fiftyFifty' | 'gravity') => {
+    const changes = [...getDynamicChanges(strategy), {}];
+    if (strategy === 'none') {
+      updateNoneParams({ dynamicDataChanges: changes });
+    } else if (strategy === 'fiftyFifty') {
+      updateFiftyFiftyParams({ dynamicDataChanges: changes });
+    } else {
+      updateGravityParams({ dynamicDataChanges: changes });
+    }
+  };
+
+  const removeDynamicChange = (strategy: 'none' | 'fiftyFifty' | 'gravity', index: number) => {
+    const current = getDynamicChanges(strategy);
+    const changes = current.filter((_, idx) => idx !== index);
+    const normalized = changes.length > 0 ? changes : [{}];
+
+    if (strategy === 'none') {
+      updateNoneParams({ dynamicDataChanges: normalized });
+    } else if (strategy === 'fiftyFifty') {
+      updateFiftyFiftyParams({ dynamicDataChanges: normalized });
+    } else {
+      updateGravityParams({ dynamicDataChanges: normalized });
+    }
+  };
+
   return (
     <Collapsible open={experiment.isOpen} onOpenChange={onToggle}>
       <Card className="bg-gradient-card border-border shadow-card">
@@ -862,37 +985,63 @@ const ExperimentPanel = ({
                   <Label className="text-sm">Données dynamiques</Label>
                 </div>
                 {strategyHyperparams.none.dynamicData && (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Client dynamique</Label>
-                      <Input 
-                        type="number" 
-                        value={strategyHyperparams.none.dynamicClient ?? ''} 
-                        onChange={e => updateNoneParams({ dynamicClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Paquet de données</Label>
-                      <Input 
-                        type="number" 
-                        value={strategyHyperparams.none.receiverClient ?? ''} 
-                        onChange={e => updateNoneParams({ receiverClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Round de changement</Label>
-                      <Input 
-                        type="number" 
-                        value={strategyHyperparams.none.changeRound ?? ''} 
-                        onChange={e => updateNoneParams({ changeRound: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                    </div>
+                  <div className="space-y-3">
+                    {getDynamicChanges('none').map((entry, idx) => (
+                      <div key={`none-dynamic-${idx}`} className="grid grid-cols-12 gap-3 items-end">
+                        <div className="col-span-4">
+                          <Label className="text-xs text-muted-foreground">Numéro de client dynamique</Label>
+                          <Input
+                            type="number"
+                            value={entry.dynamicClient ?? ''}
+                            onChange={e => updateDynamicChange('none', idx, 'dynamicClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            disabled={disabled}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="col-span-4">
+                          <Label className="text-xs text-muted-foreground">Numéro de paquet de données</Label>
+                          <Input
+                            type="number"
+                            value={entry.receiverClient ?? ''}
+                            onChange={e => updateDynamicChange('none', idx, 'receiverClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            disabled={disabled}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <Label className="text-xs text-muted-foreground">Round de changement de données</Label>
+                          <Input
+                            type="number"
+                            value={entry.changeRound ?? ''}
+                            onChange={e => updateDynamicChange('none', idx, 'changeRound', e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            disabled={disabled}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeDynamicChange('none', idx)}
+                            disabled={disabled}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addDynamicChange('none')}
+                      disabled={disabled}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> Ajouter un échange
+                    </Button>
                   </div>
                 )}
               </div>
@@ -910,37 +1059,63 @@ const ExperimentPanel = ({
                   <Label className="text-sm">Données dynamiques</Label>
                 </div>
                 {strategyHyperparams.fiftyFifty.dynamicData && (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Client dynamique</Label>
-                      <Input 
-                        type="number" 
-                        value={strategyHyperparams.fiftyFifty.dynamicClient ?? ''} 
-                        onChange={e => updateFiftyFiftyParams({ dynamicClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Paquet de données</Label>
-                      <Input 
-                        type="number" 
-                        value={strategyHyperparams.fiftyFifty.receiverClient ?? ''} 
-                        onChange={e => updateFiftyFiftyParams({ receiverClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Round de changement</Label>
-                      <Input 
-                        type="number" 
-                        value={strategyHyperparams.fiftyFifty.changeRound ?? ''} 
-                        onChange={e => updateFiftyFiftyParams({ changeRound: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                    </div>
+                  <div className="space-y-3">
+                    {getDynamicChanges('fiftyFifty').map((entry, idx) => (
+                      <div key={`ff-dynamic-${idx}`} className="grid grid-cols-12 gap-3 items-end">
+                        <div className="col-span-4">
+                          <Label className="text-xs text-muted-foreground">Numéro de client dynamique</Label>
+                          <Input
+                            type="number"
+                            value={entry.dynamicClient ?? ''}
+                            onChange={e => updateDynamicChange('fiftyFifty', idx, 'dynamicClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            disabled={disabled}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="col-span-4">
+                          <Label className="text-xs text-muted-foreground">Numéro de paquet de données</Label>
+                          <Input
+                            type="number"
+                            value={entry.receiverClient ?? ''}
+                            onChange={e => updateDynamicChange('fiftyFifty', idx, 'receiverClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            disabled={disabled}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <Label className="text-xs text-muted-foreground">Round de changement de données</Label>
+                          <Input
+                            type="number"
+                            value={entry.changeRound ?? ''}
+                            onChange={e => updateDynamicChange('fiftyFifty', idx, 'changeRound', e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            disabled={disabled}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeDynamicChange('fiftyFifty', idx)}
+                            disabled={disabled}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addDynamicChange('fiftyFifty')}
+                      disabled={disabled}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> Ajouter un échange
+                    </Button>
                   </div>
                 )}
               </div>
@@ -993,37 +1168,63 @@ const ExperimentPanel = ({
                   <Label className="text-sm">Données dynamiques</Label>
                 </div>
                 {strategyHyperparams.gravity.dynamicData && (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Client dynamique</Label>
-                      <Input 
-                        type="number" 
-                        value={strategyHyperparams.gravity.dynamicClient ?? ''} 
-                        onChange={e => updateGravityParams({ dynamicClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Paquet de données</Label>
-                      <Input 
-                        type="number" 
-                        value={strategyHyperparams.gravity.receiverClient ?? ''} 
-                        onChange={e => updateGravityParams({ receiverClient: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Round de changement</Label>
-                      <Input 
-                        type="number" 
-                        value={strategyHyperparams.gravity.changeRound ?? ''} 
-                        onChange={e => updateGravityParams({ changeRound: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })} 
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                    </div>
+                  <div className="space-y-3">
+                    {getDynamicChanges('gravity').map((entry, idx) => (
+                      <div key={`gravity-dynamic-${idx}`} className="grid grid-cols-12 gap-3 items-end">
+                        <div className="col-span-4">
+                          <Label className="text-xs text-muted-foreground">Numéro de client dynamique</Label>
+                          <Input
+                            type="number"
+                            value={entry.dynamicClient ?? ''}
+                            onChange={e => updateDynamicChange('gravity', idx, 'dynamicClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            disabled={disabled}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="col-span-4">
+                          <Label className="text-xs text-muted-foreground">Numéro de paquet de données</Label>
+                          <Input
+                            type="number"
+                            value={entry.receiverClient ?? ''}
+                            onChange={e => updateDynamicChange('gravity', idx, 'receiverClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            disabled={disabled}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <Label className="text-xs text-muted-foreground">Round de changement de données</Label>
+                          <Input
+                            type="number"
+                            value={entry.changeRound ?? ''}
+                            onChange={e => updateDynamicChange('gravity', idx, 'changeRound', e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            disabled={disabled}
+                            className="mt-1"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeDynamicChange('gravity', idx)}
+                            disabled={disabled}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addDynamicChange('gravity')}
+                      disabled={disabled}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> Ajouter un échange
+                    </Button>
                   </div>
                 )}
               </div>

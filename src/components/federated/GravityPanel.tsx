@@ -13,6 +13,11 @@ interface GravityHyperparams {
   dynamicClient?: number;
   receiverClient?: number;
   changeRound?: number;
+  dynamicDataChanges?: Array<{
+    dynamicClient?: number;
+    receiverClient?: number;
+    changeRound?: number;
+  }>;
 }
 
 interface GravityPanelProps {
@@ -25,8 +30,34 @@ interface GravityPanelProps {
 export const GravityPanel: React.FC<GravityPanelProps> = ({ value, onChange, collapsed = false, onCollapseToggle }) => {
   const [local, setLocal] = useState(value);
 
+  const getDynamicChanges = () => {
+    const changes = local.dynamicDataChanges;
+    return changes && changes.length > 0 ? changes : [{}];
+  };
+
   const handleChange = (field: keyof GravityHyperparams, val: any) => {
     const updated = { ...local, [field]: val };
+    setLocal(updated);
+    onChange(updated);
+  };
+
+  const updateDynamicChange = (index: number, field: 'dynamicClient' | 'receiverClient' | 'changeRound', val: number | undefined) => {
+    const changes = [...getDynamicChanges()];
+    changes[index] = { ...(changes[index] || {}), [field]: val };
+    const updated = { ...local, dynamicDataChanges: changes };
+    setLocal(updated);
+    onChange(updated);
+  };
+
+  const addDynamicChange = () => {
+    const updated = { ...local, dynamicDataChanges: [...getDynamicChanges(), {}] };
+    setLocal(updated);
+    onChange(updated);
+  };
+
+  const removeDynamicChange = (index: number) => {
+    const changes = getDynamicChanges().filter((_, idx) => idx !== index);
+    const updated = { ...local, dynamicDataChanges: changes.length > 0 ? changes : [{}] };
     setLocal(updated);
     onChange(updated);
   };
@@ -48,19 +79,31 @@ export const GravityPanel: React.FC<GravityPanelProps> = ({ value, onChange, col
             <Label>Données dynamiques</Label>
           </div>
           {local.dynamicData && (
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Label>Numéro du client dynamique</Label>
-                <Input type="number" value={local.dynamicClient ?? ''} onChange={e => handleChange('dynamicClient', parseInt(e.target.value, 10))} />
-              </div>
-              <div className="flex-1">
-                <Label>Numéro du paquet de données</Label>
-                <Input type="number" value={local.receiverClient ?? ''} onChange={e => handleChange('receiverClient', parseInt(e.target.value, 10))} />
-              </div>
-              <div className="flex-1">
-                <Label>Round de changement de données</Label>
-                <Input type="number" value={local.changeRound ?? ''} onChange={e => handleChange('changeRound', parseInt(e.target.value, 10))} />
-              </div>
+            <div className="space-y-3">
+              {getDynamicChanges().map((entry, idx) => (
+                <div key={`gravity-dynamic-${idx}`} className="grid grid-cols-12 gap-3 items-end">
+                  <div className="col-span-4">
+                    <Label>Numéro du client dynamique</Label>
+                    <Input type="number" value={entry.dynamicClient ?? ''} onChange={e => updateDynamicChange(idx, 'dynamicClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
+                  </div>
+                  <div className="col-span-4">
+                    <Label>Numéro du paquet de données</Label>
+                    <Input type="number" value={entry.receiverClient ?? ''} onChange={e => updateDynamicChange(idx, 'receiverClient', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
+                  </div>
+                  <div className="col-span-3">
+                    <Label>Round de changement de données</Label>
+                    <Input type="number" value={entry.changeRound ?? ''} onChange={e => updateDynamicChange(idx, 'changeRound', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
+                  </div>
+                  <div className="col-span-1">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => removeDynamicChange(idx)}>
+                      Suppr.
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addDynamicChange}>
+                Ajouter un échange
+              </Button>
             </div>
           )}
         </CardContent>

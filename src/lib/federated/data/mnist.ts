@@ -101,6 +101,43 @@ export const oneHot = (label: number, numClasses: number = 10): number[] => {
 // Map to store assigned primary label per client pair so assignments are stable
 const pairLabelMap: Map<number, number> = new Map();
 
+// Update pairLabelMap when transferring data from one client group to another
+export const updatePairLabelMapForTransfer = (
+  fromGroupIndex: number,
+  toGroupIndex: number
+): void => {
+  const sourceLabel = pairLabelMap.get(fromGroupIndex);
+  if (sourceLabel !== undefined) {
+    pairLabelMap.set(toGroupIndex, sourceLabel);
+    console.log(`[pairLabelMap] Updated: group ${toGroupIndex} now maps to label ${sourceLabel} (from group ${fromGroupIndex})`);
+  }
+};
+
+// Reset pairLabelMap for fresh experiment
+export const resetPairLabelMap = (): void => {
+  pairLabelMap.clear();
+  console.log('[pairLabelMap] Cleared for new experiment');
+};
+
+// Get the group index for a client (extracted to avoid duplication)
+export const getClientGroupIndex = (
+  clientId: string,
+  distributionMode: 'pairs' | 'groups' = 'groups'
+): number => {
+  let clientIndex = 0;
+  const m = clientId.match(/client-(\d+)/);
+  if (m) clientIndex = Number(m[1]);
+  else clientIndex = clientId.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7) & 0xffffffff;
+
+  if (distributionMode === 'groups') {
+    if (clientIndex <= 2) return 0;
+    else if (clientIndex <= 5) return 1;
+    else return 2;
+  } else {
+    return Math.floor(clientIndex / 2);
+  }
+};
+
 // Get a random subset of MNIST for a client (non-IID simulation)
 export const getClientDataSubset = (
   data: MNISTData,
@@ -108,7 +145,8 @@ export const getClientDataSubset = (
   numSamples: number,
   nonIID: boolean = true,
   seed: number = 42,
-  distributionMode: 'pairs' | 'groups' = 'groups'
+  distributionMode: 'pairs' | 'groups' = 'groups',
+  dataType: 'train' | 'test' = 'train'
 ): { inputs: number[][]; outputs: number[][] } => {
   const inputs: number[][] = [];
   const outputs: number[][] = [];
@@ -186,6 +224,23 @@ export const getClientDataSubset = (
       const idx = shuffledAll[i];
       inputs.push(data.images[idx]);
       outputs.push(oneHot(data.labels[idx]));
+    }
+
+    // Log distribution for this client (top 4 labels)
+    const labelCounts: Record<number, number> = {};
+    for (const output of outputs) {
+      const label = output.indexOf(1);
+      labelCounts[label] = (labelCounts[label] || 0) + 1;
+    }
+    const sortedLabels = Object.entries(labelCounts)
+      .map(([label, count]) => ({ label: parseInt(label), count, percentage: (count / outputs.length) * 100 }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 4);
+    const distribution = sortedLabels
+      .map(({ label, percentage }) => `${label}:${percentage.toFixed(1)}%`)
+      .join(', ');
+    if (distribution && dataType === 'train') {
+      console.log(`${clientId} [group ${pairIndex}→label ${primaryLabel}] {${distribution}}`);
     }
   } else {
     // IID: uniform random sampling
