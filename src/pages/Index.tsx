@@ -34,6 +34,8 @@ const IndexContent = () => {
   const [dataset, setDataset] = useState<DatasetType>('mnist');
   const [distribution, setDistribution] = useState<DistributionType>('70-30');
   const [dirichletAlpha, setDirichletAlpha] = useState(0.5);
+  const [byzantineCount, setByzantineCount] = useState(0);
+  const [attackMethod, setAttackMethod] = useState<ByzantineAttack>('local-model-poisoning');
   const {
     state,
     mnistLoaded,
