@@ -32,6 +32,7 @@ const IndexContent = () => {
   const [spectral, setSpectral] = useState({ numClusters: 3 });
   const [dataset, setDataset] = useState<DatasetType>('mnist');
   const [distribution, setDistribution] = useState<DistributionType>('70-30');
+  const [dirichletAlpha, setDirichletAlpha] = useState(0.5);
   const {
     state,
     mnistLoaded,
