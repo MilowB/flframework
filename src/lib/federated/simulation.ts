@@ -22,6 +22,7 @@ import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
 import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores, getUnHappyClients, resetUnHappyClients, type AlexandreContext } from './assignment';
+import { applyByzantineAttack } from './attacks';
 
 import {
   pca3D_single
@@ -376,6 +377,7 @@ export const runFederatedRound = async (
 
   // Phase 3: Receive models
   onServerStatusUpdate('receiving');
+  const clientResultsWithClientId: { weights: ModelWeights; dataSize: number; clientId: string }[] = [];
   for (let i = 0; i < trainedClients.length; i++) {
     const { result, client } = trainedClients[i];
     let weightsToUse = result.weights;
@@ -383,6 +385,7 @@ export const runFederatedRound = async (
     trainedClients[i].result.weights = weightsToUse;
 
     clientResults.push({ weights: weightsToUse, dataSize: client.dataSize });
+    clientResultsWithClientId.push({ weights: weightsToUse, dataSize: client.dataSize, clientId: client.id });
     clientMetricsForRound.push({
       clientId: client.id,
       clientName: client.name,
@@ -397,6 +400,40 @@ export const runFederatedRound = async (
       lastUpdate: Date.now(),
       roundsParticipated: client.roundsParticipated + 1,
     });
+  }
+
+  // Phase 3.5: Apply Byzantine attack (poison Byzantine client weights before aggregation)
+  const byzantineCount = serverConfig.byzantineCount ?? 0;
+  if (byzantineCount > 0) {
+    // Select the first N clients as Byzantine (deterministic, sorted by index)
+    const sortedIds = participatingIds.slice().sort((a, b) => {
+      const numA = parseInt(a.split('-')[1] || '0', 10);
+      const numB = parseInt(b.split('-')[1] || '0', 10);
+      return numA - numB;
+    });
+    const byzantineClientIds = sortedIds.slice(0, Math.min(byzantineCount, sortedIds.length));
+
+    const attackedResults = applyByzantineAttack(
+      clientResultsWithClientId,
+      globalModel,
+      {
+        byzantineCount,
+        attackMethod: serverConfig.byzantineAttackMethod || 'local-model-poisoning',
+      },
+      byzantineClientIds,
+      currentRound,
+      serverConfig.totalRounds
+    );
+
+    // Update clientResults with poisoned weights
+    for (let i = 0; i < clientResults.length; i++) {
+      const attacked = attackedResults.find(r => r.clientId === trainedClients[i].client.id);
+      if (attacked) {
+        clientResults[i] = { weights: attacked.weights, dataSize: attacked.dataSize };
+        // Also update trainedClients for clustering phase
+        trainedClients[i].result.weights = attacked.weights;
+      }
+    }
   }
 
   // Phase 4: Clustering and aggregation
