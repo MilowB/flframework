@@ -404,7 +404,12 @@ export const runFederatedRound = async (
 
   // Phase 3.5: Apply Byzantine attack (poison Byzantine client weights before aggregation)
   const byzantineCount = serverConfig.byzantineCount ?? 0;
-  if (byzantineCount > 0) {
+  const byzantineIntervals = serverConfig.byzantineActiveIntervals;
+  const isByzantineActive = byzantineCount > 0 && (
+    !byzantineIntervals || byzantineIntervals.length === 0 ||
+    byzantineIntervals.some(iv => currentRound >= iv.start && currentRound <= iv.end)
+  );
+  if (isByzantineActive) {
     // Select the first N clients as Byzantine (deterministic, sorted by index)
     const sortedIds = participatingIds.slice().sort((a, b) => {
       const numA = parseInt(a.split('-')[1] || '0', 10);

@@ -21,7 +21,7 @@ import FiftyFiftyPanel from '@/components/federated/FiftyFiftyPanel';
 import KmeansPanel from '@/components/federated/KmeansPanel';
 import SpectralPanel from '@/components/federated/SpectralPanel';
 import DatasetPanel, { DatasetType, DistributionType } from '@/components/federated/DatasetPanel';
-import ByzantinePanel, { ByzantineAttack } from '@/components/federated/ByzantinePanel';
+import ByzantinePanel, { ByzantineAttack, ByzantineInterval } from '@/components/federated/ByzantinePanel';
 
 
 const IndexContent = () => {
@@ -36,6 +36,7 @@ const IndexContent = () => {
   const [dirichletAlpha, setDirichletAlpha] = useState(0.5);
   const [byzantineCount, setByzantineCount] = useState(0);
   const [attackMethod, setAttackMethod] = useState<ByzantineAttack>('local-model-poisoning');
+  const [byzantineIntervals, setByzantineIntervals] = useState<ByzantineInterval[]>([]);
   const {
     state,
     mnistLoaded,
@@ -149,6 +150,7 @@ const IndexContent = () => {
         <ByzantinePanel
           byzantineCount={byzantineCount}
           attackMethod={attackMethod}
+          activeIntervals={byzantineIntervals}
           onByzantineCountChange={(count) => {
             setByzantineCount(count);
             updateServerConfig({ byzantineCount: count });
@@ -156,6 +158,10 @@ const IndexContent = () => {
           onAttackMethodChange={(method) => {
             setAttackMethod(method);
             updateServerConfig({ byzantineAttackMethod: method });
+          }}
+          onActiveIntervalsChange={(intervals) => {
+            setByzantineIntervals(intervals);
+            updateServerConfig({ byzantineActiveIntervals: intervals });
           }}
           disabled={state.isRunning}
           maxClients={state.clients.length}

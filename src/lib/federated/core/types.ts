@@ -65,6 +65,7 @@ export interface ServerConfig {
   clientCount?: number;
   byzantineCount?: number;
   byzantineAttackMethod?: 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling';
+  byzantineActiveIntervals?: { start: number; end: number }[];
 }
 
 export interface WeightsSnapshot {
