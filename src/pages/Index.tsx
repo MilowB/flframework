@@ -150,6 +150,7 @@ const IndexContent = () => {
         <ByzantinePanel
           byzantineCount={byzantineCount}
           attackMethod={attackMethod}
+          activeIntervals={byzantineIntervals}
           onByzantineCountChange={(count) => {
             setByzantineCount(count);
             updateServerConfig({ byzantineCount: count });
@@ -157,6 +158,10 @@ const IndexContent = () => {
           onAttackMethodChange={(method) => {
             setAttackMethod(method);
             updateServerConfig({ byzantineAttackMethod: method });
+          }}
+          onActiveIntervalsChange={(intervals) => {
+            setByzantineIntervals(intervals);
+            updateServerConfig({ byzantineActiveIntervals: intervals });
           }}
           disabled={state.isRunning}
           maxClients={state.clients.length}
