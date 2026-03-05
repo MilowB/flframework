@@ -149,8 +149,14 @@ const IndexContent = () => {
         <ByzantinePanel
           byzantineCount={byzantineCount}
           attackMethod={attackMethod}
-          onByzantineCountChange={setByzantineCount}
-          onAttackMethodChange={setAttackMethod}
+          onByzantineCountChange={(count) => {
+            setByzantineCount(count);
+            updateServerConfig({ byzantineCount: count });
+          }}
+          onAttackMethodChange={(method) => {
+            setAttackMethod(method);
+            updateServerConfig({ byzantineAttackMethod: method });
+          }}
           disabled={state.isRunning}
           maxClients={state.clients.length}
         />
