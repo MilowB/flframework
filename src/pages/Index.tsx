@@ -21,6 +21,7 @@ import FiftyFiftyPanel from '@/components/federated/FiftyFiftyPanel';
 import KmeansPanel from '@/components/federated/KmeansPanel';
 import SpectralPanel from '@/components/federated/SpectralPanel';
 import DatasetPanel, { DatasetType, DistributionType } from '@/components/federated/DatasetPanel';
+import ByzantinePanel, { ByzantineAttack } from '@/components/federated/ByzantinePanel';
 
 
 const IndexContent = () => {
@@ -41,6 +42,8 @@ const IndexContent = () => {
     console.log(`[Index.tsx] handleDirichletAlphaChange called with value=${value}`);
     setDirichletAlpha(value);
   };
+  const [byzantineCount, setByzantineCount] = useState(0);
+  const [attackMethod, setAttackMethod] = useState<ByzantineAttack>('local-model-poisoning');
   const {
     state,
     mnistLoaded,
@@ -148,6 +151,22 @@ const IndexContent = () => {
           onDistributionChange={handleDistributionChange}
           onDirichletAlphaChange={handleDirichletAlphaChange}
           disabled={state.isRunning}
+        />
+
+        {/* Byzantine Panel */}
+        <ByzantinePanel
+          byzantineCount={byzantineCount}
+          attackMethod={attackMethod}
+          onByzantineCountChange={(count) => {
+            setByzantineCount(count);
+            updateServerConfig({ byzantineCount: count });
+          }}
+          onAttackMethodChange={(method) => {
+            setAttackMethod(method);
+            updateServerConfig({ byzantineAttackMethod: method });
+          }}
+          disabled={state.isRunning}
+          maxClients={state.clients.length}
         />
 
         {/* Main Grid - 3 columns */}
