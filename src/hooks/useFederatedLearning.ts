@@ -70,6 +70,15 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
     stateRef.current = state;
   }, [state]);
 
+  // Keep refs to distribution config so they're always up-to-date
+  const distributionTypeRef = useRef(distributionType);
+  const dirichletAlphaRef = useRef(dirichletAlpha);
+  useEffect(() => {
+    distributionTypeRef.current = distributionType;
+    dirichletAlphaRef.current = dirichletAlpha;
+    console.log(`[useFederatedLearning useEffect] Updated refs: distributionType=${distributionType}, dirichletAlpha=${dirichletAlpha}`);
+  }, [distributionType, dirichletAlpha]);
+
   const [mnistLoaded, setMnistLoaded] = useState(false);
   const abortRef = useRef(false);
   const [loadedVisualizations3D, setLoadedVisualizations3D] = useState<{ round: number; models: Model3DPosition[] }[] | undefined>();
@@ -127,8 +136,9 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
   }, []);
 
   const startTraining = useCallback(async () => {
-    // Set distribution config before training
-    setDistributionConfig(distributionType || '70-30', dirichletAlpha ?? 0.5);
+    // Set distribution config before training - use refs to get latest values
+    console.log(`[useFederatedLearning] startTraining called with distributionType=${distributionTypeRef.current}, dirichletAlpha=${dirichletAlphaRef.current}`);
+    setDistributionConfig(distributionTypeRef.current || '70-30', dirichletAlphaRef.current ?? 0.5);
 
     // Initialize model synchronously if not present
     let currentGlobalModel = state.globalModel;

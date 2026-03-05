@@ -31,7 +31,9 @@ export const gradientNormHistoryStore: Map<string, number[]> = new Map();
 export let distributionConfig: { type: '70-30' | 'dirichlet'; dirichletAlpha: number } = { type: '70-30', dirichletAlpha: 0.5 };
 
 export const setDistributionConfig = (type: '70-30' | 'dirichlet', dirichletAlpha: number = 0.5): void => {
+  console.log(`[setDistributionConfig] Setting to type=${type}, dirichletAlpha=${dirichletAlpha}`);
   distributionConfig = { type, dirichletAlpha };
+  console.log(`[setDistributionConfig] distributionConfig is now:`, distributionConfig);
 };
 
 // Getter for client models (used by save feature)

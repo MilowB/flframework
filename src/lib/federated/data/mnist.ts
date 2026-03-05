@@ -218,6 +218,7 @@ export const getClientDataSubset = (
   };
 
   if (!nonIID) {
+    console.log("IID: uniform random sampling");
     // IID: uniform random sampling
     const indices = Array.from({ length: data.labels.length }, (_, i) => i);
     const shuffled = seededShuffle(indices, seed);
@@ -228,8 +229,10 @@ export const getClientDataSubset = (
     }
     return { inputs, outputs };
   }
+  console.log("distributionType :" +distributionType);
 
   if (distributionType === 'dirichlet') {
+    console.log("Distribution de Dirichlet sélectionnée.");
     // Dirichlet non-IID distribution
     const numClasses = 10;
     // Each client gets a different Dirichlet sample using client-specific seed
@@ -319,7 +322,7 @@ export const getClientDataSubset = (
     primaryLabel = found;
   }
 
-  const primaryCount = Math.floor(numSamples * 0.7);
+  const primaryCount = Math.floor(numSamples * 0.3); // @debug devrait être 0.7
   const randomCount = numSamples - primaryCount;
 
   const primaryIndices = data.labels

@@ -100,7 +100,10 @@ const DatasetPanel: React.FC<DatasetPanelProps> = ({
               </Label>
               <Select
                 value={distribution}
-                onValueChange={(value) => onDistributionChange(value as DistributionType)}
+                onValueChange={(value) => {
+                  console.log(`[DatasetPanel] onDistributionChange called with value=${value}`);
+                  onDistributionChange(value as DistributionType);
+                }}
                 disabled={disabled}
               >
                 <SelectTrigger className="w-full bg-background">

@@ -33,6 +33,14 @@ const IndexContent = () => {
   const [dataset, setDataset] = useState<DatasetType>('mnist');
   const [distribution, setDistribution] = useState<DistributionType>('70-30');
   const [dirichletAlpha, setDirichletAlpha] = useState(0.5);
+  const handleDistributionChange = (value: DistributionType) => {
+    console.log(`[Index.tsx] handleDistributionChange called with value=${value}`);
+    setDistribution(value);
+  };
+  const handleDirichletAlphaChange = (value: number) => {
+    console.log(`[Index.tsx] handleDirichletAlphaChange called with value=${value}`);
+    setDirichletAlpha(value);
+  };
   const {
     state,
     mnistLoaded,
@@ -137,8 +145,8 @@ const IndexContent = () => {
           distribution={distribution}
           dirichletAlpha={dirichletAlpha}
           onDatasetChange={setDataset}
-          onDistributionChange={setDistribution}
-          onDirichletAlphaChange={setDirichletAlpha}
+          onDistributionChange={handleDistributionChange}
+          onDirichletAlphaChange={handleDirichletAlphaChange}
           disabled={state.isRunning}
         />
 
