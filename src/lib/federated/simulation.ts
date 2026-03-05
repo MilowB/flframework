@@ -22,6 +22,7 @@ import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
 import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores, getUnHappyClients, resetUnHappyClients, type AlexandreContext } from './assignment';
+import { applyByzantineAttack } from './attacks';
 
 import {
   pca3D_single
