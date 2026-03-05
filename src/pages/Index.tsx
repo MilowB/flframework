@@ -36,6 +36,7 @@ const IndexContent = () => {
   const [dirichletAlpha, setDirichletAlpha] = useState(0.5);
   const [byzantineCount, setByzantineCount] = useState(0);
   const [attackMethod, setAttackMethod] = useState<ByzantineAttack>('local-model-poisoning');
+  const [byzantineIntervals, setByzantineIntervals] = useState<ByzantineInterval[]>([]);
   const {
     state,
     mnistLoaded,
