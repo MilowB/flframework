@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ShieldAlert, HelpCircle, Plus, Trash2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-export type ByzantineAttack = 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling';
+export type ByzantineAttack = 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling' | 'hdpa';
 export interface ByzantineInterval { start: number; end: number; }
 
 interface ByzantinePanelProps {
