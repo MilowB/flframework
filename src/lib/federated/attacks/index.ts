@@ -1,15 +1,16 @@
 // Byzantine Attack Strategies
-export { applyLocalModelPoisoning } from './localModelPoisoning';
+export { applyLocalModelPoisoning, initializeByzantineObjective, resetByzantineObjectives } from './localModelPoisoning';
 export type { LocalModelPoisoningConfig } from './localModelPoisoning';
 
 import type { ModelWeights } from '../core/types';
-import { applyLocalModelPoisoning } from './localModelPoisoning';
+import { applyLocalModelPoisoning, initializeByzantineObjective } from './localModelPoisoning';
 
 export type ByzantineAttackMethod = 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling';
 
 export interface ByzantineConfig {
   byzantineCount: number;
   attackMethod: ByzantineAttackMethod;
+  epsilon?: number; // Scaling factor for poisoning (for local-model-poisoning)
 }
 
 /**
@@ -29,13 +30,21 @@ export const applyByzantineAttack = (
   }
 
   switch (config.attackMethod) {
-    case 'local-model-poisoning':
-      return applyLocalModelPoisoning(allClientResults, globalModel, {
-        byzantineCount: config.byzantineCount,
-        byzantineClientIds,
-        currentRound,
-        totalRounds,
+    case 'local-model-poisoning': {
+      // For local-model-poisoning, apply per-client poisoning
+      const epsilon = config.epsilon ?? 0.1;
+      return allClientResults.map(result => {
+        if (!byzantineClientIds.includes(result.clientId)) {
+          return result;
+        }
+        // Apply poisoning to this Byzantine client
+        const poisonedWeights = applyLocalModelPoisoning(result.clientId, result.weights, epsilon);
+        return {
+          ...result,
+          weights: poisonedWeights,
+        };
       });
+    }
     case 'label-flipping':
       // TODO: implement label flipping attack
       console.warn('[Byzantine] Label flipping not yet implemented');

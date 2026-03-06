@@ -144,8 +144,27 @@ export const simulateClientTraining = async (
   onStatusUpdate?: (status: 'training' | 'evaluating') => void,
   currentRound?: number,
   globalModelFromServer?: ModelWeights,
-  modelArchitecture: string = 'mlp-small'
+  modelArchitecture: string = 'mlp-small',
+  isByzantine: boolean = false,
+  poisoningEpsilon: number = 0.1
 ): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number; gradientNorm: number }> => {
+  // If client is Byzantine, apply poisoning instead of fine-tuning
+  if (isByzantine) {
+    const { applyLocalModelPoisoning } = await import('../attacks');
+    
+    // Apply poisoning to the received model
+    const poisonedWeights = applyLocalModelPoisoning(client.id, globalModel, poisoningEpsilon);
+    
+    // Return poisoned model with dummy metrics (no actual training)
+    return {
+      weights: poisonedWeights,
+      loss: 0,
+      accuracy: 0,
+      testAccuracy: 0,
+      gradientNorm: 0,
+    };
+  }
+
   // Ensure MNIST is loaded
   let trainData = mnistTrainData;
   if (!trainData) {
@@ -440,7 +459,7 @@ export const createClient = (index: number): ClientState => {
     localLoss: 0,
     localAccuracy: 0,
     localTestAccuracy: 0,
-    dataSize: Math.floor(rng.next() * 400) + 200,
+    dataSize: 600,
     lastUpdate: Date.now(),
     roundsParticipated: 0,
     localModelHistory: [],

@@ -17,159 +17,92 @@ export interface LocalModelPoisoningConfig {
   baseLambda?: number;
 }
 
-/**
- * Estimate the natural evolution direction of the global model
- * by computing element-wise signs of the average honest update.
- * s[j] = +1 if parameter j increases on average, -1 otherwise.
- */
-const estimateSignVector = (
-  honestUpdates: { weights: ModelWeights; dataSize: number }[],
-  globalModel: ModelWeights
-): { layerSigns: number[][]; biasSigns: number[] } => {
-  const numLayers = globalModel.layers.length;
-
-  // Compute weighted average delta across honest clients
-  const totalData = honestUpdates.reduce((s, c) => s + c.dataSize, 0);
-  const avgDeltaLayers: number[][] = globalModel.layers.map(l => new Array(l.length).fill(0));
-  const avgDeltaBias: number[] = new Array(globalModel.bias.length).fill(0);
-
-  for (const { weights, dataSize } of honestUpdates) {
-    const w = dataSize / totalData;
-    for (let l = 0; l < numLayers; l++) {
-      for (let i = 0; i < weights.layers[l].length; i++) {
-        avgDeltaLayers[l][i] += (weights.layers[l][i] - globalModel.layers[l][i]) * w;
-      }
-    }
-    for (let i = 0; i < weights.bias.length; i++) {
-      avgDeltaBias[i] += (weights.bias[i] - globalModel.bias[i]) * w;
-    }
-  }
-
-  // Extract signs
-  const layerSigns = avgDeltaLayers.map(l => l.map(v => (v >= 0 ? 1 : -1)));
-  const biasSigns = avgDeltaBias.map(v => (v >= 0 ? 1 : -1));
-
-  return { layerSigns, biasSigns };
-};
+// Global store for objective models per Byzantine client (initialized once per experiment)
+const byzantineObjectiveModels: Map<string, ModelWeights> = new Map();
+let masterObjectiveModel: ModelWeights | null = null;
 
 /**
- * Compute lambda that grows slowly over rounds to avoid early detection.
- * Bounded so the poisoned model stays close to the global model initially.
+ * Initialize objective models for all Byzantine clients (called once at experiment start)
+ * Generates a single master objective, then adds noise to create per-client variants
  */
-const computeLambda = (
-  currentRound: number,
-  totalRounds: number,
-  baseLambda: number
-): number => {
-  // Progressive scaling: lambda grows linearly from baseLambda * 0.1 to baseLambda
-  const progress = Math.min(1, (currentRound + 1) / totalRounds);
-  return baseLambda * (0.1 + 0.9 * progress);
-};
-
-/**
- * Estimate the range of honest client parameter values for stealth against
- * trimmed mean / median aggregations.
- */
-const estimateHonestBounds = (
-  honestUpdates: { weights: ModelWeights }[],
-  layerIdx: number,
-  paramIdx: number,
-  isBias: boolean
-): { min: number; max: number } => {
-  const values = honestUpdates.map(c =>
-    isBias ? c.weights.bias[paramIdx] : c.weights.layers[layerIdx][paramIdx]
-  );
-  return {
-    min: Math.min(...values),
-    max: Math.max(...values),
+export const initializeByzantineObjective = (
+  byzantineClientIds: string[],
+  globalModel: ModelWeights,
+  noiseScale: number = 0.5
+): void => {
+  if (masterObjectiveModel !== null) return; // Already initialized
+  // Generate single master objective by adding noise to global model
+  masterObjectiveModel = {
+    layers: globalModel.layers.map(layer =>
+      layer.map(v => v + (Math.random() - 0.5) * 2 * noiseScale)
+    ),
+    bias: globalModel.bias.map(b => b + (Math.random() - 0.5) * 2 * noiseScale),
+    version: globalModel.version,
   };
+  
+  // Decline master objective for each Byzantine client (add small perturbations)
+  const perturbationScale = noiseScale * 0.25; // Smaller perturbations for per-client variants
+  for (const clientId of byzantineClientIds) {
+    const clientObjective: ModelWeights = {
+      layers: masterObjectiveModel.layers.map(layer =>
+        layer.map(v => v + (Math.random() - 0.5) * 2 * perturbationScale)
+      ),
+      bias: masterObjectiveModel.bias.map(b => b + (Math.random() - 0.5) * 2 * perturbationScale),
+      version: masterObjectiveModel.version,
+    };
+    byzantineObjectiveModels.set(clientId, clientObjective);
+  }
+  
+  console.log(`[Byzantine] Initialized master objective and ${byzantineClientIds.length} per-client variants`);
 };
 
 /**
- * Apply Local Model Poisoning attack.
+ * Reset all Byzantine objective models (call at experiment start)
+ */
+export const resetByzantineObjectives = (): void => {
+  byzantineObjectiveModels.clear();
+  masterObjectiveModel = null;
+};
+
+/**
+ * Apply Local Model Poisoning attack to a single Byzantine client.
  * 
- * Takes all client results and replaces Byzantine client weights with
- * coordinated poisoned models that push the global model in the opposite
- * direction of natural learning.
+ * Called once per Byzantine client per round.
  * 
- * @param allClientResults All client results (honest + Byzantine)
- * @param globalModel Current global model
- * @param config Attack configuration
- * @returns Modified client results with Byzantine weights replaced
+ * @param clientId Byzantine client ID
+ * @param receivedModel Model received from server by the Byzantine client
+ * @param epsilon Scaling factor for the poisoning (default 0.1)
+ * @returns Poisoned model weights
  */
 export const applyLocalModelPoisoning = (
-  allClientResults: { weights: ModelWeights; dataSize: number; clientId: string }[],
-  globalModel: ModelWeights,
-  config: LocalModelPoisoningConfig
-): { weights: ModelWeights; dataSize: number; clientId: string }[] => {
-  const { byzantineClientIds, currentRound, totalRounds, baseLambda = 0.5 } = config;
+  clientId: string,
+  receivedModel: ModelWeights,
+  epsilon: number = 0.1
+): ModelWeights => {
+  // Get the objective model for this client (must be initialized first)
+  const objectiveModel = byzantineObjectiveModels.get(clientId);
+  if (!objectiveModel) {
+    console.warn(`[Byzantine] No objective model for ${clientId}, returning received model unchanged`);
+    return receivedModel;
+  }
 
-  if (byzantineClientIds.length === 0) return allClientResults;
-
-  const byzantineSet = new Set(byzantineClientIds);
-
-  // Separate honest and Byzantine results
-  const honestResults = allClientResults.filter(r => !byzantineSet.has(r.clientId));
-  const byzantineResults = allClientResults.filter(r => byzantineSet.has(r.clientId));
-
-  if (honestResults.length === 0) return allClientResults;
-
-  // Step 1: Estimate natural direction
-  const { layerSigns, biasSigns } = estimateSignVector(honestResults, globalModel);
-
-  // Step 2: Compute adaptive lambda
-  const lambda = computeLambda(currentRound, totalRounds, baseLambda);
-
-  // Step 3: Build target malicious model: w' = w_global - lambda * s
-  const maliciousLayers: number[][] = globalModel.layers.map((layer, l) =>
-    layer.map((v, i) => v - lambda * layerSigns[l][i])
+  // Compute delta: objective - received
+  const deltaLayers: number[][] = objectiveModel.layers.map((layer, l) =>
+    layer.map((v, i) => v - receivedModel.layers[l][i])
   );
-  const maliciousBias: number[] = globalModel.bias.map((v, i) => v - lambda * biasSigns[i]);
+  const deltaBias: number[] = objectiveModel.bias.map((v, i) => v - receivedModel.bias[i]);
 
-  // Step 4: Generate coordinated Byzantine models with small perturbations
-  const epsilon = 0.01; // Small perturbation to form a compact cluster
-  const rng = () => (Math.random() - 0.5) * 2 * epsilon;
+  // Add epsilon * delta to received model
+  const poisonedLayers: number[][] = receivedModel.layers.map((layer, l) =>
+    layer.map((v, i) => v + epsilon * deltaLayers[l][i])
+  );
+  const poisonedBias: number[] = receivedModel.bias.map((v, i) => v + epsilon * deltaBias[i]);
 
-  const modifiedResults = allClientResults.map(result => {
-    if (!byzantineSet.has(result.clientId)) return result;
+  console.log(`[Byzantine] Client ${clientId} poisoned (ε=${epsilon.toFixed(4)})`);
 
-    const isFirst = result.clientId === byzantineClientIds[0];
-
-    // First Byzantine client gets exact malicious model, others get perturbed versions
-    const poisonedLayers = maliciousLayers.map(layer =>
-      layer.map(v => isFirst ? v : v + rng())
-    );
-    const poisonedBias = maliciousBias.map(v => isFirst ? v : v + rng());
-
-    // Step 5: For robustness against trimmed mean/median, clamp values
-    // just beyond honest bounds to influence the statistic
-    const clampedLayers = poisonedLayers.map((layer, l) =>
-      layer.map((v, i) => {
-        const bounds = estimateHonestBounds(honestResults, l, i, false);
-        const range = bounds.max - bounds.min;
-        // Clamp to within 1.5x the range beyond honest bounds
-        const margin = range * 0.5;
-        return Math.max(bounds.min - margin, Math.min(bounds.max + margin, v));
-      })
-    );
-    const clampedBias = poisonedBias.map((v, i) => {
-      const bounds = estimateHonestBounds(honestResults, 0, i, true);
-      const range = bounds.max - bounds.min;
-      const margin = range * 0.5;
-      return Math.max(bounds.min - margin, Math.min(bounds.max + margin, v));
-    });
-
-    console.log(`[Byzantine] Client ${result.clientId} poisoned (round ${currentRound}, λ=${lambda.toFixed(4)})`);
-
-    return {
-      ...result,
-      weights: {
-        layers: clampedLayers,
-        bias: clampedBias,
-        version: result.weights.version,
-      },
-    };
-  });
-
-  return modifiedResults;
+  return {
+    layers: poisonedLayers,
+    bias: poisonedBias,
+    version: receivedModel.version,
+  };
 };

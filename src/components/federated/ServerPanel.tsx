@@ -205,7 +205,7 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
             </Label>
             <Select
               value={config.modelAssignmentMethod ?? '1NN'}
-              onValueChange={(value: '1NN' | 'Probabiliste' | 'CosineSimilarity' | 'Alexandre') => onConfigChange({ modelAssignmentMethod: value })}
+              onValueChange={(value: '1NN' | 'Probabiliste' | 'CosineSimilarity' | 'FedAvg' | 'Alexandre') => onConfigChange({ modelAssignmentMethod: value })}
               disabled={disabled}
             >
               <SelectTrigger className="bg-muted/50 border-border">
@@ -214,6 +214,9 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
               <SelectContent>
                 <SelectItem value="1NN">
                   <span className="font-medium">1NN</span>
+                </SelectItem>
+                <SelectItem value="FedAvg">
+                  <span className="font-medium">FedAvg</span>
                 </SelectItem>
                 <SelectItem value="Probabiliste">
                   <span className="font-medium">Probabiliste</span>

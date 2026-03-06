@@ -146,6 +146,7 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
       setSeed(state.serverConfig.seed ?? 42);
       currentGlobalModel = initializeModel(state.serverConfig.modelArchitecture);
       const newClients = Array.from({ length: state.clients.length }, (_, i) => createClient(i));
+      console.log('[Client DataSize Distribution]', newClients.map(c => `${c.id}:${c.dataSize}`).join(', '));
       setState(prev => ({
         ...prev,
         globalModel: currentGlobalModel,
