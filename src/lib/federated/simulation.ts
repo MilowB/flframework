@@ -368,7 +368,8 @@ const executeClientTraining = async (
       globalModel,
       serverConfig.modelArchitecture,
       byzantineClientIds.has(client.id),
-      poisoningEpsilon
+      poisoningEpsilon,
+      serverConfig.byzantineAttackMethod || 'local-model-poisoning'
     );
 
     onClientUpdate(client.id, {
