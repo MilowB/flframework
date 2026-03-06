@@ -62,6 +62,7 @@ interface ModelVisualization3DProps {
   clusterModels?: Map<string, { layers: number[][]; bias: number[] }>;
   globalModel?: { layers: number[][]; bias: number[]; version: number } | null;
   loadedVisualizations?: { round: number; models: Model3DPosition[] }[];
+  byzantineCount?: number;
 }
 
 // Individual model sphere/box component
@@ -434,7 +435,8 @@ export function ModelVisualization3D({
   clientModels, 
   clusterModels, 
   globalModel,
-  loadedVisualizations
+  loadedVisualizations,
+  byzantineCount = 0
 }: ModelVisualization3DProps) {
   const [currentRound, setCurrentRound] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
@@ -679,8 +681,22 @@ export function ModelVisualization3D({
     const roundIndex = Math.min(currentRound, history.length - 1);
     const filtered = allRoundsPositions.filter(p => p.roundIndex === roundIndex);
     
+    // Override colors for byzantine clients (first N clients sorted by index)
+    if (byzantineCount > 0) {
+      // Collect byzantine client IDs (client-0, client-1, ..., client-(N-1))
+      const byzantineIds = new Set(
+        Array.from({ length: byzantineCount }, (_, i) => `client-${i}`)
+      );
+      return filtered.map(p => {
+        if (p.type === 'client' && byzantineIds.has(p.id)) {
+          return { ...p, color: '#ef4444' }; // red
+        }
+        return p;
+      });
+    }
+    
     return filtered;
-  }, [allRoundsPositions, currentRound, history]);
+  }, [allRoundsPositions, currentRound, history, byzantineCount]);
   
   const maxRound = Math.max(0, history.length - 1);
   
