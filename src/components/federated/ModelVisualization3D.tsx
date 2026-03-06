@@ -435,7 +435,8 @@ export function ModelVisualization3D({
   clientModels, 
   clusterModels, 
   globalModel,
-  loadedVisualizations
+  loadedVisualizations,
+  byzantineCount = 0
 }: ModelVisualization3DProps) {
   const [currentRound, setCurrentRound] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
