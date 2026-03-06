@@ -24,6 +24,7 @@ interface ByzantinePanelProps {
 
 const attackOptions: { value: ByzantineAttack; label: string; description: string }[] = [
   { value: 'local-model-poisoning', label: 'Local Model Poisoning', description: 'Le client envoie un modèle empoisonné au serveur' },
+  { value: 'hdpa', label: 'HDPA', description: 'Empoisonnement via encodage hyperdimensionnel des données' },
   { value: 'label-flipping', label: 'Label Flipping', description: 'Les labels d\'entraînement sont inversés' },
   { value: 'gradient-scaling', label: 'Gradient Scaling', description: 'Les gradients sont multipliés par un facteur malveillant' },
 ];
