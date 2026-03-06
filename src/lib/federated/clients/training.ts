@@ -146,16 +146,15 @@ export const simulateClientTraining = async (
   globalModelFromServer?: ModelWeights,
   modelArchitecture: string = 'mlp-small',
   isByzantine: boolean = false,
-  poisoningEpsilon: number = 0.1
+  poisoningEpsilon: number = 0.1,
+  byzantineAttackMethod: string = 'local-model-poisoning'
 ): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number; gradientNorm: number }> => {
-  // If client is Byzantine, apply poisoning instead of fine-tuning
-  if (isByzantine) {
+  // If client is Byzantine with local-model-poisoning, skip training
+  if (isByzantine && byzantineAttackMethod === 'local-model-poisoning') {
     const { applyLocalModelPoisoning } = await import('../attacks');
     
-    // Apply poisoning to the received model
     const poisonedWeights = applyLocalModelPoisoning(client.id, globalModel, poisoningEpsilon);
     
-    // Return poisoned model with dummy metrics (no actual training)
     return {
       weights: poisonedWeights,
       loss: 0,
