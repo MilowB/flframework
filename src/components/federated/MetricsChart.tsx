@@ -560,6 +560,7 @@ export const MetricsChart = ({ history, clientModels, clusterModels, globalModel
                 clusterModels={clusterModels}
                 globalModel={globalModel}
                 loadedVisualizations={loadedVisualizations}
+                byzantineCount={byzantineCount}
               />
             </TabsContent>
           </Tabs>
