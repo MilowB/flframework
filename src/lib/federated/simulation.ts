@@ -299,7 +299,7 @@ const determineModelToSend = (
       clusterClientIds,
       selectedClients,
       round: currentRound,
-      distanceMetric,
+      distanceMetric: distanceMetric as 'l1' | 'l2' | 'cosine',
       alexandreContext,
     }
   );
