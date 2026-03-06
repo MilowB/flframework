@@ -62,6 +62,7 @@ interface ModelVisualization3DProps {
   clusterModels?: Map<string, { layers: number[][]; bias: number[] }>;
   globalModel?: { layers: number[][]; bias: number[]; version: number } | null;
   loadedVisualizations?: { round: number; models: Model3DPosition[] }[];
+  byzantineCount?: number;
 }
 
 // Individual model sphere/box component
