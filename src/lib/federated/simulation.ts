@@ -21,7 +21,7 @@ import { simulateClientTraining, selectClients, createClient } from './clients/t
 import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
-import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores, getUnHappyClients, resetUnHappyClients, type AlexandreContext } from './assignment';
+import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores, getUnHappyClients, resetUnHappyClients, type AlexandreContext, type AssignmentMethod } from './assignment';
 import { applyByzantineAttack } from './attacks';
 
 import {
