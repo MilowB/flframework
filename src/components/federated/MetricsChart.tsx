@@ -15,6 +15,7 @@ interface MetricsChartProps {
   clusterModels?: Map<string, { layers: number[][]; bias: number[] }>;
   globalModel?: ModelWeights | null;
   loadedVisualizations?: { round: number; models: Model3DPosition[] }[];
+  byzantineCount?: number;
 }
 
 // Color palette for multiple lines
