@@ -21,7 +21,7 @@ import { simulateClientTraining, selectClients, createClient } from './clients/t
 import { aggregationMethods } from './server/aggregation';
 import { evaluateOnTestSet, evaluateClusterModel, computeWeightsSnapshot } from './server/evaluation';
 import { clusterClientModels, computeSilhouetteScore } from './clustering';
-import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores, getUnHappyClients, resetUnHappyClients, type AlexandreContext } from './assignment';
+import { applyAssignment, recordClientCosineSimilarity, detectCosineSimilarityDrop, findMostApproachedCluster, resetCosineSimilarityStores, getUnHappyClients, resetUnHappyClients, type AlexandreContext, type AssignmentMethod } from './assignment';
 import { applyByzantineAttack } from './attacks';
 
 import {
@@ -290,7 +290,7 @@ const determineModelToSend = (
   }
 
   return applyAssignment(
-    modelAssignmentMethod,
+    modelAssignmentMethod as AssignmentMethod,
     client,
     {
       globalModel,
@@ -299,7 +299,7 @@ const determineModelToSend = (
       clusterClientIds,
       selectedClients,
       round: currentRound,
-      distanceMetric,
+      distanceMetric: distanceMetric as 'l1' | 'l2' | 'cosine',
       alexandreContext,
     }
   );
@@ -368,7 +368,8 @@ const executeClientTraining = async (
       globalModel,
       serverConfig.modelArchitecture,
       byzantineClientIds.has(client.id),
-      poisoningEpsilon
+      poisoningEpsilon,
+      serverConfig.byzantineAttackMethod || 'local-model-poisoning'
     );
 
     onClientUpdate(client.id, {

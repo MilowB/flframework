@@ -146,16 +146,15 @@ export const simulateClientTraining = async (
   globalModelFromServer?: ModelWeights,
   modelArchitecture: string = 'mlp-small',
   isByzantine: boolean = false,
-  poisoningEpsilon: number = 0.1
+  poisoningEpsilon: number = 0.1,
+  byzantineAttackMethod: string = 'local-model-poisoning'
 ): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number; gradientNorm: number }> => {
-  // If client is Byzantine, apply poisoning instead of fine-tuning
-  if (isByzantine) {
+  // If client is Byzantine with local-model-poisoning, skip training
+  if (isByzantine && byzantineAttackMethod === 'local-model-poisoning') {
     const { applyLocalModelPoisoning } = await import('../attacks');
     
-    // Apply poisoning to the received model
     const poisonedWeights = applyLocalModelPoisoning(client.id, globalModel, poisoningEpsilon);
     
-    // Return poisoned model with dummy metrics (no actual training)
     return {
       weights: poisonedWeights,
       loss: 0,
@@ -244,7 +243,18 @@ export const simulateClientTraining = async (
     generateClientTestData(client.id, client.dataSize);
   }
 
-  const { inputs, outputs } = clientDataStore.get(client.id)!;
+  let { inputs, outputs } = clientDataStore.get(client.id)!;
+
+  // Apply HDPA data poisoning if this is a Byzantine client using HDPA
+  if (isByzantine && byzantineAttackMethod === 'hdpa') {
+    const { applyHDPAToDataset, DEFAULT_HDPA_CONFIG } = await import('../attacks/hdpa');
+    const { SeededRandom } = await import('../core/random');
+    const hdpaRng = new SeededRandom(getSeed() + parseInt(client.id.split('-')[1] || '0', 10) + (currentRound || 0));
+    const poisoned = applyHDPAToDataset(inputs, outputs, DEFAULT_HDPA_CONFIG, hdpaRng);
+    inputs = poisoned.inputs;
+    outputs = poisoned.outputs;
+    console.log(`[HDPA] Client ${client.id} training on poisoned dataset (${Math.floor(DEFAULT_HDPA_CONFIG.poisonRatio * 100)}% poisoned)`);
+  }
 
   // Training configuration for MNIST
   // Utilise le nombre d'epochs du client s'il est défini, sinon 3 par défaut

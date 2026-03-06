@@ -64,7 +64,7 @@ export interface ServerConfig {
   seed?: number;
   clientCount?: number;
   byzantineCount?: number;
-  byzantineAttackMethod?: 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling';
+  byzantineAttackMethod?: 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling' | 'hdpa';
   byzantineActiveIntervals?: { start: number; end: number }[];
 }
 

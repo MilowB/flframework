@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ShieldAlert, HelpCircle, Plus, Trash2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-export type ByzantineAttack = 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling';
+export type ByzantineAttack = 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling' | 'hdpa';
 export interface ByzantineInterval { start: number; end: number; }
 
 interface ByzantinePanelProps {
@@ -24,6 +24,7 @@ interface ByzantinePanelProps {
 
 const attackOptions: { value: ByzantineAttack; label: string; description: string }[] = [
   { value: 'local-model-poisoning', label: 'Local Model Poisoning', description: 'Le client envoie un modèle empoisonné au serveur' },
+  { value: 'hdpa', label: 'HDPA', description: 'Empoisonnement via encodage hyperdimensionnel des données' },
   { value: 'label-flipping', label: 'Label Flipping', description: 'Les labels d\'entraînement sont inversés' },
   { value: 'gradient-scaling', label: 'Gradient Scaling', description: 'Les gradients sont multipliés par un facteur malveillant' },
 ];

@@ -1,11 +1,13 @@
 // Byzantine Attack Strategies
 export { applyLocalModelPoisoning, initializeByzantineObjective, resetByzantineObjectives } from './localModelPoisoning';
 export type { LocalModelPoisoningConfig } from './localModelPoisoning';
+export { applyHDPAToDataset, resetHDPACache, DEFAULT_HDPA_CONFIG } from './hdpa';
+export type { HDPAConfig } from './hdpa';
 
 import type { ModelWeights } from '../core/types';
 import { applyLocalModelPoisoning, initializeByzantineObjective } from './localModelPoisoning';
 
-export type ByzantineAttackMethod = 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling';
+export type ByzantineAttackMethod = 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling' | 'hdpa';
 
 export interface ByzantineConfig {
   byzantineCount: number;
