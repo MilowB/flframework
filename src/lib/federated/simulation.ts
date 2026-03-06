@@ -290,7 +290,7 @@ const determineModelToSend = (
   }
 
   return applyAssignment(
-    modelAssignmentMethod,
+    modelAssignmentMethod as AssignmentMethod,
     client,
     {
       globalModel,
