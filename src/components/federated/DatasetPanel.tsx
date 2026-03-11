@@ -14,9 +14,11 @@ interface DatasetPanelProps {
   dataset: DatasetType;
   distribution: DistributionType;
   dirichletAlpha: number;
+  muFraction: number;
   onDatasetChange: (dataset: DatasetType) => void;
   onDistributionChange: (distribution: DistributionType) => void;
   onDirichletAlphaChange: (alpha: number) => void;
+  onMuFractionChange: (mu: number) => void;
   disabled?: boolean;
 }
 
