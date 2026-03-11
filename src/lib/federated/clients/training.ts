@@ -18,6 +18,7 @@ import {
   cloneWeights,
   trainEpochWithRng,
   computeAccuracy,
+  forward,
   vectorizeModel,
   pca3D_single,
   MNIST_INPUT_SIZE,
@@ -136,6 +137,35 @@ export const computeCNNGradientNorm = (before: CNNWeights, after: CNNWeights): n
   return Math.sqrt(sumSquares);
 };
 
+const computePrototypeEmbedding = (inputs: number[][], model: MLPWeights): number[] => {
+  if (!inputs.length) {
+    return [];
+  }
+
+  const prototype = new Array(MNIST_HIDDEN_SIZE).fill(0);
+  for (let sampleIndex = 0; sampleIndex < inputs.length; sampleIndex++) {
+    const { hidden } = forward(inputs[sampleIndex], model);
+    for (let hiddenIndex = 0; hiddenIndex < hidden.length; hiddenIndex++) {
+      prototype[hiddenIndex] += hidden[hiddenIndex];
+    }
+  }
+
+  for (let hiddenIndex = 0; hiddenIndex < prototype.length; hiddenIndex++) {
+    prototype[hiddenIndex] /= inputs.length;
+  }
+
+  return prototype;
+};
+
+export interface ClientTrainingResult {
+  weights: ModelWeights;
+  loss: number;
+  accuracy: number;
+  testAccuracy: number;
+  gradientNorm: number;
+  embeddingPrototype?: number[];
+}
+
 // Real client training with MLP on MNIST data
 export const simulateClientTraining = async (
   client: ClientState,
@@ -148,7 +178,7 @@ export const simulateClientTraining = async (
   isByzantine: boolean = false,
   poisoningEpsilon: number = 0.1,
   byzantineAttackMethod: string = 'local-model-poisoning'
-): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number; gradientNorm: number }> => {
+): Promise<ClientTrainingResult> => {
   // If client is Byzantine with local-model-poisoning, skip training
   if (isByzantine && byzantineAttackMethod === 'local-model-poisoning') {
     const { applyLocalModelPoisoning } = await import('../attacks');
@@ -161,6 +191,7 @@ export const simulateClientTraining = async (
       accuracy: 0,
       testAccuracy: 0,
       gradientNorm: 0,
+      embeddingPrototype: undefined,
     };
   }
 
@@ -247,10 +278,10 @@ export const simulateClientTraining = async (
 
   // Apply HDPA data poisoning if this is a Byzantine client using HDPA
   if (isByzantine && byzantineAttackMethod === 'hdpa') {
-    const { applyHDPAToDataset, DEFAULT_HDPA_CONFIG } = await import('../attacks/hdpa');
+    const { getOrCreateHDPAPoisonedDataset, DEFAULT_HDPA_CONFIG } = await import('../attacks/hdpa');
     const { SeededRandom } = await import('../core/random');
-    const hdpaRng = new SeededRandom(getSeed() + parseInt(client.id.split('-')[1] || '0', 10) + (currentRound || 0));
-    const poisoned = applyHDPAToDataset(inputs, outputs, DEFAULT_HDPA_CONFIG, hdpaRng);
+    const hdpaRng = new SeededRandom(getSeed() + parseInt(client.id.split('-')[1] || '0', 10));
+    const poisoned = getOrCreateHDPAPoisonedDataset(client.id, inputs, outputs, DEFAULT_HDPA_CONFIG, hdpaRng);
     inputs = poisoned.inputs;
     outputs = poisoned.outputs;
     console.log(`[HDPA] Client ${client.id} training on poisoned dataset (${Math.floor(DEFAULT_HDPA_CONFIG.poisonRatio * 100)}% poisoned)`);
@@ -289,6 +320,7 @@ export const simulateClientTraining = async (
 
   // Compute gradient norm (L2 norm of weight changes during training)
   const gradientNorm = computeGradientNorm(modelBeforeTraining, localMLP);
+  const embeddingPrototype = computePrototypeEmbedding(inputs, localMLP);
 
   // Save gradient norm to history (keep most recent at index 0)
   client.gradientNormHistory.unshift(gradientNorm);
@@ -335,6 +367,7 @@ export const simulateClientTraining = async (
     accuracy,
     testAccuracy,
     gradientNorm,
+    embeddingPrototype,
   };
 };
 
@@ -345,7 +378,7 @@ export const simulateCNNClientTraining = async (
   onProgress: (progress: number) => void,
   onStatusUpdate?: (status: 'training' | 'evaluating') => void,
   modelArchitecture: string = 'cnn-lite'
-): Promise<{ weights: ModelWeights; loss: number; accuracy: number; testAccuracy: number; gradientNorm: number }> => {
+): Promise<ClientTrainingResult> => {
   // Ensure MNIST is loaded
   let trainData = mnistTrainData;
   if (!trainData) {
@@ -429,6 +462,7 @@ export const simulateCNNClientTraining = async (
     accuracy,
     testAccuracy,
     gradientNorm,
+    embeddingPrototype: undefined,
   };
 };
 

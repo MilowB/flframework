@@ -179,6 +179,43 @@ export const SimilarityMatrix = ({ history }: SimilarityMatrixProps) => {
 						</ResponsiveContainer>
 					</div>
 				</div>
+
+				{round.intraClusterSimilarityMatrices && round.intraClusterSimilarityMatrices.length > 0 && (
+					<div className="mt-4 p-3 rounded-lg bg-muted/20 border border-border">
+						<div className="mb-2 text-sm font-medium">Matrices intra-clusters (embeddings)</div>
+						<div className="space-y-4">
+							{round.intraClusterSimilarityMatrices.map((item) => {
+								const size = item.matrix.length;
+								const subCellSize = size <= 8 ? 24 : (size <= 16 ? 16 : 12);
+								return (
+									<div key={`intra-${item.clusterId}`} className="p-2 rounded border border-border/50 bg-background/40">
+										<div className="text-xs text-muted-foreground mb-2">
+											Cluster {item.clusterId + 1} ({item.clientIds.join(', ')})
+										</div>
+										<div className="overflow-auto" style={{ maxWidth: Math.min(600, size * (subCellSize + 2)), maxHeight: 260 }}>
+											<div style={{ display: 'grid', gridTemplateColumns: `repeat(${size}, ${subCellSize}px)`, gap: 2 }}>
+												{item.matrix.flatMap((row, i) => row.map((v, j) => (
+													<div
+														key={`intra-cell-${item.clusterId}-${i}-${j}`}
+														title={`${item.clientIds[i]} → ${item.clientIds[j]} : ${(v * 100).toFixed(2)}%`}
+														style={{
+															width: subCellSize,
+															height: subCellSize,
+															backgroundColor: valueToColor(v),
+															border: '1px solid rgba(0,0,0,0.06)',
+														}}
+													>
+														<span style={{ fontSize: '10px', fontWeight: 500 }}>{(v * 100).toFixed(1)}</span>
+													</div>
+												)))}
+											</div>
+										</div>
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				)}
 			</div>
 		</div>
 	);

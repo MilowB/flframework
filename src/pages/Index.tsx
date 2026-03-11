@@ -55,7 +55,7 @@ const IndexContent = () => {
     resetTraining,
     setClientCount,
     updateServerConfig,
-    loadExperiment,
+    loadExperiment: loadExperimentState,
   } = useFederatedLearning(6, gravity, none, fiftyFifty, distribution, dirichletAlpha);
   const [gravityCollapsed, setGravityCollapsed] = useState(false);
   const [kmeansCollapsed, setKmeansCollapsed] = useState(false);
@@ -101,6 +101,27 @@ const IndexContent = () => {
     updateServerConfig({ seed });
   };
 
+  const handleLoadExperiment = (data: import('@/lib/federated/experimentStorage').ExperimentData) => {
+    const settings = data.experimentSettings;
+    if (settings) {
+      if (settings.dataset) setDataset(settings.dataset);
+      if (settings.distribution) setDistribution(settings.distribution);
+      if (typeof settings.dirichletAlpha === 'number') setDirichletAlpha(settings.dirichletAlpha);
+      if (settings.none) setNone(settings.none);
+      if (settings.fiftyFifty) setFiftyFifty(settings.fiftyFifty);
+      if (settings.gravity) setGravity(settings.gravity);
+      if (typeof settings.byzantineCount === 'number') setByzantineCount(settings.byzantineCount);
+      if (settings.attackMethod) setAttackMethod(settings.attackMethod);
+      if (settings.byzantineIntervals) setByzantineIntervals(settings.byzantineIntervals);
+    } else {
+      // Backward-compatible fallback from serverConfig for older files
+      if (typeof data.serverConfig.byzantineCount === 'number') setByzantineCount(data.serverConfig.byzantineCount);
+      if (data.serverConfig.byzantineAttackMethod) setAttackMethod(data.serverConfig.byzantineAttackMethod);
+      if (data.serverConfig.byzantineActiveIntervals) setByzantineIntervals(data.serverConfig.byzantineActiveIntervals);
+    }
+    loadExperimentState(data);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -121,9 +142,20 @@ const IndexContent = () => {
             <ExperimentControls
               state={state}
               clientModels={clientModels}
-              onLoad={loadExperiment}
+              onLoad={handleLoadExperiment}
               disabled={state.isRunning}
               visualizations3D={visualizations3D}
+              experimentSettings={{
+                dataset,
+                distribution,
+                dirichletAlpha,
+                gravity,
+                none,
+                fiftyFifty,
+                byzantineCount,
+                attackMethod,
+                byzantineIntervals,
+              }}
             />
           </div>
         </div>

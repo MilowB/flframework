@@ -4,7 +4,7 @@ import { computeProbabilisticAssignments } from './probabilistic';
 import { getModelForCosineSimilarity } from './cosineSimilarity';
 import { getModelForAlexandre, type AlexandreContext } from './alexandre';
 
-export type AssignmentMethod = '1NN' | 'Probabiliste' | 'CosineSimilarity' | 'FedAvg' | 'Alexandre';
+export type AssignmentMethod = '1NN' | '1NN-Embeddings' | '1NN-Gradients-Embeddings' | 'Probabiliste' | 'CosineSimilarity' | 'FedAvg' | 'Alexandre';
 
 // Store for tracking unhappy clients (detected by Alexandre strategy when returning global model)
 let unHappyClientsStore: Set<string> = new Set();
@@ -55,6 +55,8 @@ export const applyAssignment = (
     const round = context.round;
     switch (method) {
         case '1NN':
+        case '1NN-Embeddings':
+        case '1NN-Gradients-Embeddings':
             return getModelFor1NN(
                 client.id,
                 context.globalModel

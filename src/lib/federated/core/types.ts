@@ -51,7 +51,7 @@ export interface ClientState {
 export interface ServerConfig {
   aggregationMethod: 'fedavg' | 'fedprox' | 'scaffold' | 'custom';
   clientAggregationMethod?: 'none' | '50-50' | 'gravity';
-  modelAssignmentMethod?: '1NN' | 'Probabiliste' | 'CosineSimilarity' | 'FedAvg' | 'Alexandre';
+  modelAssignmentMethod?: '1NN' | '1NN-Embeddings' | '1NN-Gradients-Embeddings' | 'Probabiliste' | 'CosineSimilarity' | 'FedAvg' | 'Alexandre';
   distanceMetric?: 'l1' | 'l2' | 'cosine';
   clusteringMethod?: 'louvain' | 'kmeans' | 'leiden' | 'spectral';
   kmeansNumClusters?: number;
@@ -104,6 +104,11 @@ export interface RoundMetrics {
   timestamp: number;
   weightsSnapshot?: WeightsSnapshot;
   distanceMatrix?: number[][];
+  intraClusterSimilarityMatrices?: {
+    clusterId: number;
+    clientIds: string[];
+    matrix: number[][];
+  }[];
   agreementMatrix?: number[][]; // Agreement matrix from consensus clustering
   clusters?: string[][];
   silhouetteAvg?: number;

@@ -2,10 +2,56 @@
 import type { FederatedState, RoundMetrics, ModelWeights } from '../core/types';
 import type { Model3DPosition } from '../visualization/pca';
 
+export interface ExperimentSettings {
+  dataset?: 'mnist';
+  distribution?: '70-30' | 'dirichlet' | 'iid';
+  dirichletAlpha?: number;
+  gravity?: {
+    gravitationConstant: number;
+    clusterWeight: number;
+    clientWeight: number;
+    dynamicData: boolean;
+    dynamicClient?: number;
+    receiverClient?: number;
+    changeRound?: number;
+    dynamicDataChanges?: Array<{
+      dynamicClient?: number;
+      receiverClient?: number;
+      changeRound?: number;
+    }>;
+  };
+  none?: {
+    dynamicData: boolean;
+    dynamicClient?: number;
+    receiverClient?: number;
+    changeRound?: number;
+    dynamicDataChanges?: Array<{
+      dynamicClient?: number;
+      receiverClient?: number;
+      changeRound?: number;
+    }>;
+  };
+  fiftyFifty?: {
+    dynamicData: boolean;
+    dynamicClient?: number;
+    receiverClient?: number;
+    changeRound?: number;
+    dynamicDataChanges?: Array<{
+      dynamicClient?: number;
+      receiverClient?: number;
+      changeRound?: number;
+    }>;
+  };
+  byzantineCount?: number;
+  attackMethod?: 'local-model-poisoning' | 'label-flipping' | 'gradient-scaling' | 'hdpa';
+  byzantineIntervals?: Array<{ start: number; end: number }>;
+}
+
 export interface ExperimentData {
   version: string;
   savedAt: string;
   serverConfig: FederatedState['serverConfig'];
+  experimentSettings?: ExperimentSettings;
   globalModel: ModelWeights | null;
   roundHistory: RoundMetrics[];
   clientModels: { clientId: string; weights: ModelWeights }[];
@@ -28,7 +74,8 @@ const generateFilename = (): string => {
 export const saveExperiment = (
   state: FederatedState, 
   clientModels: Map<string, ModelWeights>,
-  visualizations3D?: { round: number; models: Model3DPosition[] }[]
+  visualizations3D?: { round: number; models: Model3DPosition[] }[],
+  experimentSettings?: ExperimentSettings
 ): void => {
   // Remove heavy weight data from round history for storage
   const cleanedRoundHistory = state.roundHistory.map(round => {
@@ -46,6 +93,7 @@ export const saveExperiment = (
     version: '1.0',
     savedAt: new Date().toISOString(),
     serverConfig: state.serverConfig,
+    experimentSettings,
     globalModel: state.globalModel,
     roundHistory: cleanedRoundHistory as RoundMetrics[],
     clientModels: Array.from(clientModels.entries()).map(([clientId, weights]) => ({

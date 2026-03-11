@@ -542,15 +542,6 @@ export function ModelVisualization3D({
     const allVectors = [...allClientVectors, ...allClusterVectors, ...allGlobalVectors];
     const allMeta = [...allClientMeta, ...allClusterMeta, ...allGlobalMeta];
     
-    // LOG: Vérifier l'ordre des vecteurs dans allVectors
-    console.log('=== Order of vectors in allVectors ===');
-    allMeta.forEach((meta, i) => {
-      if (meta.roundIndex === 0) {
-        const sample = allVectors[i].slice(0, 5);
-        console.log(`Index ${i}: ${meta.id} round ${meta.roundIndex} [${sample.map(v => v.toFixed(4)).join(', ')}...]`);
-      }
-    });
-    
     const dim = allVectors[0].length;
     const mean = new Array(dim).fill(0);
     for (const vec of allVectors) {
@@ -582,37 +573,6 @@ export function ModelVisualization3D({
       console.log(`Global (round ${meta.roundIndex}): [${sample.map(v => v.toFixed(4)).join(', ')}...]`);
     });
     
-    // LOG: Afficher les vecteurs bruts et leur moyenne
-    console.log('=== Raw vectors (before centering) ===');
-    // For round 0, check cluster 0 clients
-    const round0ClientIndices: number[] = [];
-    allClientMeta.forEach((meta, i) => {
-      if (meta.roundIndex === 0) {
-        round0ClientIndices.push(i);
-        const sample = allClientVectors[i].slice(0, 5);
-        console.log(`Client ${meta.id}: [${sample.map(v => v.toFixed(4)).join(', ')}...]`);
-      }
-    });
-    
-    // Find cluster 0 for round 0
-    allClusterMeta.forEach((meta, i) => {
-      if (meta.roundIndex === 0 && meta.id === 'cluster-0') {
-        const sample = allClusterVectors[i].slice(0, 5);
-        console.log(`Cluster 0: [${sample.map(v => v.toFixed(4)).join(', ')}...]`);
-        
-        // Compute what the client average should be
-        if (round0ClientIndices.length > 0) {
-          const avgVector = new Array(5).fill(0);
-          for (const idx of round0ClientIndices) {
-            for (let j = 0; j < 5; j++) {
-              avgVector[j] += allClientVectors[idx][j] / round0ClientIndices.length;
-            }
-          }
-          console.log(`Expected avg of clients: [${avgVector.map(v => v.toFixed(4)).join(', ')}...]`);
-        }
-      }
-    });
-    
     // Project all vectors
     const positions = allVectors.map((vec, i) => {
       const centered = vec.map((v, j) => v - mean[j]);
@@ -636,9 +596,7 @@ export function ModelVisualization3D({
       // LOG: Afficher les coordonnées 3D avant normalisation
       const type = isGlobal ? 'global' : isCluster ? 'cluster' : 'client';
       const id = isGlobal ? 'Global' : meta.id;
-      if (meta.roundIndex === 0) {
-        console.log(`3D ${type} ${id} (round ${meta.roundIndex}): [${coords.map(c => c.toFixed(2)).join(', ')}]`);
-      }
+      console.log(`3D ${type} ${id} (round ${meta.roundIndex}): [${coords.map(c => c.toFixed(2)).join(', ')}]`);
       
       return {
         roundIndex: meta.roundIndex,

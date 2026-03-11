@@ -189,7 +189,7 @@ export const getClientDataSubset = (
   seed: number = 42,
   distributionMode: 'pairs' | 'groups' = 'groups',
   dataType: 'train' | 'test' = 'train',
-  distributionType: '70-30' | 'dirichlet' = '70-30',
+  distributionType: '70-30' | 'dirichlet' | 'iid' = '70-30',
   dirichletAlpha: number = 0.5
 ): { inputs: number[][]; outputs: number[][] } => {
   const inputs: number[][] = [];
@@ -217,11 +217,11 @@ export const getClientDataSubset = (
     return a;
   };
 
-  if (!nonIID) {
+  if (!nonIID || distributionType === 'iid') {
     console.log("IID: uniform random sampling");
     // IID: uniform random sampling
     const indices = Array.from({ length: data.labels.length }, (_, i) => i);
-    const shuffled = seededShuffle(indices, seed);
+    const shuffled = seededShuffle(indices, seed + clientIndex + (dataType === 'train' ? 1000 : 2000));
     for (let i = 0; i < Math.min(numSamples, shuffled.length); i++) {
       const idx = shuffled[i];
       inputs.push(data.images[idx]);
@@ -322,7 +322,7 @@ export const getClientDataSubset = (
     primaryLabel = found;
   }
 
-  const primaryCount = Math.floor(numSamples * 0.3); // @debug devrait être 0.7
+  const primaryCount = Math.floor(numSamples * 0.4);
   const randomCount = numSamples - primaryCount;
 
   const primaryIndices = data.labels

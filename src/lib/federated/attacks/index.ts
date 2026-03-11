@@ -1,7 +1,7 @@
 // Byzantine Attack Strategies
 export { applyLocalModelPoisoning, initializeByzantineObjective, resetByzantineObjectives } from './localModelPoisoning';
 export type { LocalModelPoisoningConfig } from './localModelPoisoning';
-export { applyHDPAToDataset, resetHDPACache, DEFAULT_HDPA_CONFIG } from './hdpa';
+export { applyHDPAToDataset, getOrCreateHDPAPoisonedDataset, resetHDPACache, DEFAULT_HDPA_CONFIG } from './hdpa';
 export type { HDPAConfig } from './hdpa';
 
 import type { ModelWeights } from '../core/types';

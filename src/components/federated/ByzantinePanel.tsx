@@ -23,7 +23,7 @@ interface ByzantinePanelProps {
 }
 
 const attackOptions: { value: ByzantineAttack; label: string; description: string }[] = [
-  { value: 'local-model-poisoning', label: 'Local Model Poisoning', description: 'Le client envoie un modèle empoisonné au serveur' },
+  { value: 'local-model-poisoning', label: 'Local Model Poisoning', description: 'Un serveur byzantin génère un modèle aléatoire objectif dérivé du modèle global. Chaque client byzantin dérive son sous-objectif de l\'objectif serveur byzantin et envoie un modèle empoisonné au serveur.' },
   { value: 'hdpa', label: 'HDPA', description: 'Empoisonnement via encodage hyperdimensionnel des données' },
   { value: 'label-flipping', label: 'Label Flipping', description: 'Les labels d\'entraînement sont inversés' },
   { value: 'gradient-scaling', label: 'Gradient Scaling', description: 'Les gradients sont multipliés par un facteur malveillant' },

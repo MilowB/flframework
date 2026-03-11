@@ -36,6 +36,19 @@ export const computeDistanceMatrix = (models: { layers: number[][]; bias: number
   return D;
 };
 
+export const computeDistanceMatrixFromVectors = (vectors: number[][], distanceMetric: 'l1' | 'l2' | 'cosine' = 'cosine'): number[][] => {
+  const n = vectors.length;
+  const D: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const d = computeDistance(vectors[i], vectors[j], distanceMetric);
+      D[i][j] = d;
+      D[j][i] = d;
+    }
+  }
+  return D;
+};
+
 // Cluster client models using specified clustering algorithm
 export const clusterClientModels = (
   clientResults: { id?: string; weights: ModelWeights; dataSize: number }[],
@@ -43,7 +56,8 @@ export const clusterClientModels = (
   clusteringMethod: 'louvain' | 'kmeans' | 'leiden' | 'spectral' = 'louvain',
   kmeansNumClusters?: number,
   useAgreementMatrix?: boolean,
-  spectralNumClusters?: number
+  spectralNumClusters?: number,
+  featureVectors?: number[][]
 ): { distanceMatrix: number[][]; clusters: string[][]; agreementMatrix?: number[][] } => {
   const validModels: { layers: number[][]; bias: number[] }[] = [];
   const ids: number[] = [];
@@ -58,7 +72,20 @@ export const clusterClientModels = (
     }
   }
 
-  const D = computeDistanceMatrix(validModels, distanceMetric);
+  const validFeatureVectors = featureVectors && featureVectors.length === clientResults.length
+    ? ids.map((originalIndex) => featureVectors[originalIndex])
+    : undefined;
+
+  const useFeatureVectors = Boolean(
+    validFeatureVectors &&
+    validFeatureVectors.length === validModels.length &&
+    validFeatureVectors.length > 0 &&
+    validFeatureVectors.every(v => Array.isArray(v) && v.length > 0 && v.length === validFeatureVectors[0].length)
+  );
+
+  const D = useFeatureVectors
+    ? computeDistanceMatrixFromVectors(validFeatureVectors!, distanceMetric)
+    : computeDistanceMatrix(validModels, distanceMetric);
   if (validModels.length === 0) return { distanceMatrix: D, clusters: [] as string[][], agreementMatrix: undefined };
 
   // Get client IDs
@@ -84,11 +111,12 @@ export const clusterClientModels = (
   let refined: number[];
 
   if (clusteringMethod === 'kmeans') {
-    // K-means clustering
-    const vecs = validModels.map(m => {
-      const mlp = modelWeightsToMLPWeights(m);
-      return vectorizeModel(mlp);
-    });
+    const vecs = useFeatureVectors
+      ? validFeatureVectors!
+      : validModels.map(m => {
+          const mlp = modelWeightsToMLPWeights(m);
+          return vectorizeModel(mlp);
+        });
     
     // Use specified k or determine optimal k automatically
     let k: number;

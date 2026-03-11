@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Slider } from '@/components/ui/slider';
 
 export type DatasetType = 'mnist';
-export type DistributionType = '70-30' | 'dirichlet';
+export type DistributionType = '70-30' | 'dirichlet' | 'iid';
 
 interface DatasetPanelProps {
   dataset: DatasetType;
@@ -21,11 +21,12 @@ interface DatasetPanelProps {
 }
 
 const datasetOptions: { value: DatasetType; label: string; description: string }[] = [
-  { value: 'mnist', label: 'MNIST', description: 'Chiffres manuscrits (0-9)' },
+  { value: 'mnist', label: 'MNIST', description: 'Chiffres manuscrits (0-9) - utilise un subset de 600 données / client pour l\'entrainement.'},
 ];
 
 const distributionOptions: { value: DistributionType; label: string; description: string }[] = [
-  { value: '70-30', label: '70/30', description: '70% classe principale, 30% autres' },
+  { value: '70-30', label: '40/60', description: '40% classe principale, 60% autres' },
+  { value: 'iid', label: 'IID', description: 'N échantillons aléatoires par client' },
   { value: 'dirichlet', label: 'Dirichlet', description: 'Distribution non-IID contrôlée par α' },
 ];
 
@@ -94,7 +95,7 @@ const DatasetPanel: React.FC<DatasetPanelProps> = ({
                     <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs bg-popover border border-border">
-                    <p>Stratégie de répartition des données entre clients. 70/30 : 70% classe principale, 30% autres. Dirichlet : distribution contrôlée par α (petit α = très non-IID, grand α ≈ IID).</p>
+                    <p>Stratégie de répartition des données entre clients. IID : N échantillons aléatoires par client. 40/60 : 40% classe principale, 60% autres. Dirichlet : distribution contrôlée par α (petit α = très non-IID, grand α ≈ IID).</p>
                   </TooltipContent>
                 </Tooltip>
               </Label>

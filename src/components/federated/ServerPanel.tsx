@@ -199,13 +199,13 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
                   <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs bg-popover border border-border">
-                  <p>Stratégie pour assigner un modèle de cluster à chaque client. 1NN : plus proche voisin. Probabiliste : pondéré par distance.</p>
+                  <p>Stratégie pour assigner un modèle de cluster à chaque client. 1NN : plus proche voisin sur poids modèles. 1NN-Embeddings : plus proche voisin sur prototypes d'embeddings. 1NN gradients + embeddings : 1NN + détection byzantine intra-cluster via embeddings. Probabiliste : pondéré par distance.</p>
                 </TooltipContent>
               </Tooltip>
             </Label>
             <Select
               value={config.modelAssignmentMethod ?? '1NN'}
-              onValueChange={(value: '1NN' | 'Probabiliste' | 'CosineSimilarity' | 'FedAvg' | 'Alexandre') => onConfigChange({ modelAssignmentMethod: value })}
+              onValueChange={(value: '1NN' | '1NN-Embeddings' | '1NN-Gradients-Embeddings' | 'Probabiliste' | 'CosineSimilarity' | 'FedAvg' | 'Alexandre') => onConfigChange({ modelAssignmentMethod: value })}
               disabled={disabled}
             >
               <SelectTrigger className="bg-muted/50 border-border">
@@ -214,6 +214,12 @@ export const ServerPanel = ({ config, onConfigChange, disabled, globalModelVersi
               <SelectContent>
                 <SelectItem value="1NN">
                   <span className="font-medium">1NN</span>
+                </SelectItem>
+                <SelectItem value="1NN-Embeddings">
+                  <span className="font-medium">1NN - Embeddings</span>
+                </SelectItem>
+                <SelectItem value="1NN-Gradients-Embeddings">
+                  <span className="font-medium">1NN gradients + embeddings</span>
                 </SelectItem>
                 <SelectItem value="FedAvg">
                   <span className="font-medium">FedAvg</span>

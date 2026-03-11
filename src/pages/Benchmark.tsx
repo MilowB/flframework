@@ -842,7 +842,7 @@ const ExperimentPanel = ({
                 <Label className="text-sm text-muted-foreground">Affectation modèle</Label>
                 <Select
                   value={config.modelAssignmentMethod ?? '1NN'}
-                  onValueChange={(value: '1NN' | 'Probabiliste') =>
+                  onValueChange={(value: '1NN' | '1NN-Embeddings' | '1NN-Gradients-Embeddings' | 'Probabiliste') =>
                     onUpdateConfig({ modelAssignmentMethod: value })
                   }
                   disabled={disabled}
@@ -852,6 +852,8 @@ const ExperimentPanel = ({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="1NN">1NN</SelectItem>
+                    <SelectItem value="1NN-Embeddings">1NN - Embeddings</SelectItem>
+                    <SelectItem value="1NN-Gradients-Embeddings">1NN gradients + embeddings</SelectItem>
                     <SelectItem value="Probabiliste">Probabiliste</SelectItem>
                   </SelectContent>
                 </Select>

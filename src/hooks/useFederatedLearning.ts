@@ -52,7 +52,7 @@ function getActiveDynamicDataChanges(hyperparamsByStrategy: Record<string, any>,
   return [];
 }
 
-export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, distributionType?: '70-30' | 'dirichlet', dirichletAlpha?: number, ...otherStrategies: any[]) => {
+export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, distributionType?: '70-30' | 'dirichlet' | 'iid', dirichletAlpha?: number, ...otherStrategies: any[]) => {
   const [state, setState] = useState<FederatedState>(() => ({
     isRunning: false,
     currentRound: 0,
@@ -146,7 +146,6 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
       setSeed(state.serverConfig.seed ?? 42);
       currentGlobalModel = initializeModel(state.serverConfig.modelArchitecture);
       const newClients = Array.from({ length: state.clients.length }, (_, i) => createClient(i));
-      console.log('[Client DataSize Distribution]', newClients.map(c => `${c.id}:${c.dataSize}`).join(', '));
       setState(prev => ({
         ...prev,
         globalModel: currentGlobalModel,

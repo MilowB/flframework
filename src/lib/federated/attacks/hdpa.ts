@@ -20,13 +20,14 @@ export interface HDPAConfig {
 export const DEFAULT_HDPA_CONFIG: HDPAConfig = {
   dimension: 10000,
   attackStrength: 0.3,
-  poisonRatio: 0.2,
+  poisonRatio: 0.4,
   targetClass: -1,
   attackType: 'untargeted',
 };
 
 // Cached projection matrix per image size (shared across clients for consistency)
 const projectionMatrixCache: Map<string, Float32Array> = new Map();
+const poisonedDatasetCache: Map<string, { inputs: number[][]; outputs: number[][] }> = new Map();
 
 /**
  * Get or create a random projection matrix P ∈ R^(dimension × imageSize).
@@ -228,8 +229,30 @@ export const applyHDPAToDataset = (
 };
 
 /**
+ * Get cached poisoned dataset for a Byzantine client, or generate it once.
+ */
+export const getOrCreateHDPAPoisonedDataset = (
+  clientId: string,
+  inputs: number[][],
+  outputs: number[][],
+  config: HDPAConfig,
+  clientRng: SeededRandom
+): { inputs: number[][]; outputs: number[][] } => {
+  const cached = poisonedDatasetCache.get(clientId);
+  if (cached) {
+    return cached;
+  }
+
+  const poisoned = applyHDPAToDataset(inputs, outputs, config, clientRng);
+  poisonedDatasetCache.set(clientId, poisoned);
+  console.log(`[HDPA] Generated poisoned dataset once for ${clientId}`);
+  return poisoned;
+};
+
+/**
  * Reset projection matrix cache (call on experiment reset)
  */
 export const resetHDPACache = (): void => {
   projectionMatrixCache.clear();
+  poisonedDatasetCache.clear();
 };
