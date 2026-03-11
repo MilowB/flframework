@@ -52,7 +52,7 @@ function getActiveDynamicDataChanges(hyperparamsByStrategy: Record<string, any>,
   return [];
 }
 
-export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, distributionType?: '70-30' | 'dirichlet' | 'iid', dirichletAlpha?: number, ...otherStrategies: any[]) => {
+export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, distributionType?: '70-30' | 'dirichlet' | 'iid', dirichletAlpha?: number, muFraction?: number, ...otherStrategies: any[]) => {
   const [state, setState] = useState<FederatedState>(() => ({
     isRunning: false,
     currentRound: 0,
