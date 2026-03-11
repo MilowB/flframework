@@ -31,7 +31,7 @@ const COLORS = [
   'hsl(60, 72%, 50%)',  // Yellow
 ];
 
-export const MetricsChart = ({ history, clientModels, clusterModels, globalModel, loadedVisualizations, byzantineCount = 0 }: MetricsChartProps) => {
+export const MetricsChart = ({ history, clientModels, clusterModels, globalModel, loadedVisualizations, byzantineCount = 0, modelAssignmentMethod }: MetricsChartProps) => {
   // Server chart data (global model)
   const serverChartData = useMemo(() => history.map((h) => ({
     round: h.round + 1,
