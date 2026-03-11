@@ -34,6 +34,7 @@ const IndexContent = () => {
   const [dataset, setDataset] = useState<DatasetType>('mnist');
   const [distribution, setDistribution] = useState<DistributionType>('70-30');
   const [dirichletAlpha, setDirichletAlpha] = useState(0.5);
+  const [muFraction, setMuFraction] = useState(40);
   const handleDistributionChange = (value: DistributionType) => {
     console.log(`[Index.tsx] handleDistributionChange called with value=${value}`);
     setDistribution(value);

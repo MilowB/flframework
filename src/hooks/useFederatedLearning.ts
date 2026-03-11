@@ -138,7 +138,7 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
   const startTraining = useCallback(async () => {
     // Set distribution config before training - use refs to get latest values
     console.log(`[useFederatedLearning] startTraining called with distributionType=${distributionTypeRef.current}, dirichletAlpha=${dirichletAlphaRef.current}`);
-    setDistributionConfig(distributionTypeRef.current || '70-30', dirichletAlphaRef.current ?? 0.5);
+    setDistributionConfig(distributionTypeRef.current || '70-30', dirichletAlphaRef.current ?? 0.5, muFractionRef.current ?? 40);
 
     // Initialize model synchronously if not present
     let currentGlobalModel = state.globalModel;

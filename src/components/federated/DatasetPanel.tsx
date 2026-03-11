@@ -127,6 +127,52 @@ const DatasetPanel: React.FC<DatasetPanelProps> = ({
               </Select>
             </div>
 
+            {/* Mu Fraction - shown only when 𝜇-Fraction is selected */}
+            {distribution === '70-30' && (
+              <div className="md:col-span-2 space-y-2 p-3 rounded-md border border-border/50 bg-muted/20">
+                <Label className="text-sm font-medium flex items-center gap-1.5">
+                  𝜇 (%)
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs bg-popover border border-border">
+                      <p>Pourcentage de la classe majoritaire dans le dataset local de chaque client. Les {100 - muFraction}% restants sont répartis uniformément entre les autres classes.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </Label>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">10%</span>
+                  <Slider
+                    value={[muFraction]}
+                    onValueChange={([v]) => onMuFractionChange(v)}
+                    min={10}
+                    max={90}
+                    step={1}
+                    disabled={disabled}
+                    className="flex-1"
+                  />
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">90%</span>
+                  <Input
+                    type="number"
+                    value={muFraction}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value);
+                      if (!isNaN(v) && v >= 10 && v <= 90) onMuFractionChange(v);
+                    }}
+                    min={10}
+                    max={90}
+                    step={1}
+                    disabled={disabled}
+                    className="w-20 h-8 text-sm bg-background"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {muFraction}% classe majoritaire / {100 - muFraction}% autres classes
+                </p>
+              </div>
+            )}
+
             {/* Dirichlet Alpha - shown only when Dirichlet is selected */}
             {distribution === 'dirichlet' && (
               <div className="md:col-span-2 space-y-2 p-3 rounded-md border border-border/50 bg-muted/20">

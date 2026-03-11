@@ -323,7 +323,7 @@ export const getClientDataSubset = (
     primaryLabel = found;
   }
 
-  const primaryCount = Math.floor(numSamples * 0.4);
+  const primaryCount = Math.floor(numSamples * (muFraction / 100));
   const randomCount = numSamples - primaryCount;
 
   const primaryIndices = data.labels
