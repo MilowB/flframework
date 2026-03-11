@@ -322,6 +322,7 @@ const IndexContent = () => {
               globalModel={state.globalModel}
               loadedVisualizations={loadedVisualizations3D}
               byzantineCount={state.serverConfig.byzantineCount ?? 0}
+              modelAssignmentMethod={state.serverConfig.modelAssignmentMethod}
             />
           </div>
 

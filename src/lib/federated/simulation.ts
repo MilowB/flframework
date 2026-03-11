@@ -411,6 +411,12 @@ const collectClientResults = async (
 
     clientResults.push({ weights: weightsToUse, dataSize: client.dataSize });
     clientResultsWithClientId.push({ weights: weightsToUse, dataSize: client.dataSize, clientId: client.id });
+    // Compute prototype norm (L2) if embedding prototype is available
+    let prototypeNorm: number | undefined;
+    if (result.embeddingPrototype && result.embeddingPrototype.length > 0) {
+      prototypeNorm = Math.sqrt(result.embeddingPrototype.reduce((sum, v) => sum + v * v, 0));
+    }
+
     clientMetricsForRound.push({
       clientId: client.id,
       clientName: client.name,
@@ -419,6 +425,7 @@ const collectClientResults = async (
       testAccuracy: result.testAccuracy,
       gradientNorm: result.gradientNorm,
       weights: weightsToUse,
+      prototypeNorm,
     });
 
     onClientUpdate(client.id, {

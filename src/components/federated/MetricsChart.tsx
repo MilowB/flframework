@@ -16,6 +16,7 @@ interface MetricsChartProps {
   globalModel?: ModelWeights | null;
   loadedVisualizations?: { round: number; models: Model3DPosition[] }[];
   byzantineCount?: number;
+  modelAssignmentMethod?: string;
 }
 
 // Color palette for multiple lines
@@ -30,7 +31,7 @@ const COLORS = [
   'hsl(60, 72%, 50%)',  // Yellow
 ];
 
-export const MetricsChart = ({ history, clientModels, clusterModels, globalModel, loadedVisualizations, byzantineCount = 0 }: MetricsChartProps) => {
+export const MetricsChart = ({ history, clientModels, clusterModels, globalModel, loadedVisualizations, byzantineCount = 0, modelAssignmentMethod }: MetricsChartProps) => {
   // Server chart data (global model)
   const serverChartData = useMemo(() => history.map((h) => ({
     round: h.round + 1,
@@ -97,6 +98,23 @@ export const MetricsChart = ({ history, clientModels, clusterModels, globalModel
       return dataPoint;
     });
   }, [history]);
+
+  // Prototype norm chart data (per client, per round)
+  const showPrototypeNorm = modelAssignmentMethod === '1NN-Embeddings' || modelAssignmentMethod === '1NN-Gradients-Embeddings';
+  const prototypeNormData = useMemo(() => {
+    if (!showPrototypeNorm) return [];
+    return history.map((h) => {
+      const dataPoint: Record<string, number> = { round: h.round + 1 };
+      if (h.clientMetrics) {
+        h.clientMetrics.forEach(cm => {
+          if (cm.prototypeNorm !== undefined) {
+            dataPoint[`${cm.clientId}_norm`] = cm.prototypeNorm;
+          }
+        });
+      }
+      return dataPoint;
+    });
+  }, [history, showPrototypeNorm]);
 
   const latestMetrics = history[history.length - 1];
   const previousMetrics = history[history.length - 2];
@@ -286,6 +304,69 @@ export const MetricsChart = ({ history, clientModels, clusterModels, globalModel
                             key={clusterId}
                             type="monotone"
                             dataKey={`cluster_${clusterId}`}
+                            stroke={COLORS[idx % COLORS.length]}
+                            strokeWidth={2}
+                            dot={{ fill: COLORS[idx % COLORS.length], strokeWidth: 0, r: 3 }}
+                            activeDot={{ r: 5, fill: COLORS[idx % COLORS.length] }}
+                            connectNulls
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </>
+              )}
+
+              {/* Prototype Norm Chart - only for 1NN-Embeddings or 1NN-Gradients-Embeddings */}
+              {showPrototypeNorm && availableClients.length > 0 && prototypeNormData.length > 0 && (
+                <>
+                  <div className="mt-6 mb-4 p-3 rounded-lg bg-muted/30 border border-border">
+                    <span className="text-sm text-muted-foreground">
+                      Norme du prototype (embedding) par client
+                    </span>
+                  </div>
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={prototypeNormData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 18%)" />
+                        <XAxis
+                          dataKey="round"
+                          stroke="hsl(215, 20%, 55%)"
+                          fontSize={12}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          stroke="hsl(215, 20%, 55%)"
+                          fontSize={12}
+                          tickLine={false}
+                          domain={['auto', 'auto']}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(222, 47%, 10%)',
+                            border: '1px solid hsl(222, 30%, 18%)',
+                            borderRadius: '8px',
+                            color: 'hsl(210, 40%, 98%)',
+                          }}
+                          labelFormatter={(label) => `Round ${label}`}
+                          formatter={(value: number, name: string) => {
+                            const clientId = name.replace('_norm', '');
+                            const clientName = availableClients.find(([id]) => id === clientId)?.[1] || clientId;
+                            return [value.toFixed(4), clientName];
+                          }}
+                        />
+                        <Legend
+                          wrapperStyle={{ paddingTop: '10px', fontSize: '11px' }}
+                          formatter={(value) => {
+                            const clientId = value.replace('_norm', '');
+                            return availableClients.find(([id]) => id === clientId)?.[1] || clientId;
+                          }}
+                        />
+                        {availableClients.map(([clientId], idx) => (
+                          <Line
+                            key={clientId}
+                            type="monotone"
+                            dataKey={`${clientId}_norm`}
                             stroke={COLORS[idx % COLORS.length]}
                             strokeWidth={2}
                             dot={{ fill: COLORS[idx % COLORS.length], strokeWidth: 0, r: 3 }}
