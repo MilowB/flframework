@@ -27,7 +27,7 @@ const datasetOptions: { value: DatasetType; label: string; description: string }
 ];
 
 const distributionOptions: { value: DistributionType; label: string; description: string }[] = [
-  { value: '70-30', label: '40/60', description: '40% classe principale, 60% autres' },
+  { value: '70-30', label: '𝜇-Fraction', description: '𝜇% classe principale, reste réparti' },
   { value: 'iid', label: 'IID', description: 'N échantillons aléatoires par client' },
   { value: 'dirichlet', label: 'Dirichlet', description: 'Distribution non-IID contrôlée par α' },
 ];
