@@ -47,6 +47,7 @@ export const initializeModel = (architecture: string): ModelWeights => {
   resetStores();
   resetCosineSimilarityStores();
   resetHDPACache();
+  resetEmbeddingPrototypeCache();
 
   const flat = flattenWeights(mlpWeights);
   return {
@@ -85,6 +86,10 @@ const computeMedianGradient = (gradients: number[][]): number[] => {
 
 // DEBUG flag for RNG state tracking - set to true to diagnose reproducibility issues
 const DEBUG_RNG_STATE = false;
+
+// Per-client last embedding prototype cache (for drift computation across rounds)
+const lastEmbeddingPrototypeCache = new Map<string, number[]>();
+const resetEmbeddingPrototypeCache = (): void => { lastEmbeddingPrototypeCache.clear(); };
 
 // Helper to sample RNG state without consuming it (for debugging)
 const sampleRngState = (label: string) => {
@@ -411,10 +416,17 @@ const collectClientResults = async (
 
     clientResults.push({ weights: weightsToUse, dataSize: client.dataSize });
     clientResultsWithClientId.push({ weights: weightsToUse, dataSize: client.dataSize, clientId: client.id });
-    // Compute prototype norm (L2) if embedding prototype is available
-    let prototypeNorm: number | undefined;
+    // Compute prototype drift (L2 distance vs previous round's prototype for this client)
+    let prototypeDrift: number | undefined;
     if (result.embeddingPrototype && result.embeddingPrototype.length > 0) {
-      prototypeNorm = Math.sqrt(result.embeddingPrototype.reduce((sum, v) => sum + v * v, 0));
+      const prev = lastEmbeddingPrototypeCache.get(client.id);
+      if (prev && prev.length === result.embeddingPrototype.length) {
+        prototypeDrift = Math.sqrt(
+          result.embeddingPrototype.reduce((sum, v, i) => sum + (v - prev[i]) ** 2, 0)
+        );
+      }
+      // Update cache with current prototype for next round
+      lastEmbeddingPrototypeCache.set(client.id, result.embeddingPrototype);
     }
 
     clientMetricsForRound.push({
@@ -425,7 +437,7 @@ const collectClientResults = async (
       testAccuracy: result.testAccuracy,
       gradientNorm: result.gradientNorm,
       weights: weightsToUse,
-      prototypeNorm,
+      prototypeDrift,
     });
 
     onClientUpdate(client.id, {
@@ -507,8 +519,6 @@ const performClustering = (
   silhouetteAvgForRound: number | undefined;
   clusterMetricsForRound: ClusterMetrics[];
   previousClusterModels: Map<number, ModelWeights>;
-  excludedClientIdsFromAggregation: string[];
-  clusterSimilarityMatricesForLog: Array<{ clusterId: number; clientIds: string[]; matrix: number[][] }>;
 } => {
   let clustersForRound: string[][] | undefined = undefined;
   let distanceMatrixForRound: number[][] | undefined = undefined;
@@ -516,8 +526,6 @@ const performClustering = (
   let silhouetteAvgForRound: number | undefined = undefined;
   let clusterMetricsForRound: ClusterMetrics[] = [];
   const previousClusterModels: Map<number, ModelWeights> = new Map();
-  const excludedClientIdsFromAggregation: Set<string> = new Set();
-  const clusterSimilarityMatricesForLog: Array<{ clusterId: number; clientIds: string[]; matrix: number[][] }> = [];
 
   try {
     const clientResultsWithIds = trainedClients
@@ -533,15 +541,16 @@ const performClustering = (
         return numA - numB;
       });
 
-    const shouldUseEmbeddingDistance = serverConfig.modelAssignmentMethod === '1NN-Embeddings';
-    const shouldUseHierarchicalEmbeddingDetection = serverConfig.modelAssignmentMethod === '1NN-Gradients-Embeddings';
+    const shouldUseEmbeddingDistance =
+      serverConfig.modelAssignmentMethod === '1NN-Embeddings' ||
+      serverConfig.modelAssignmentMethod === 'Dynamic-1NN-Embeddings';
     const candidateEmbeddingVectors = clientResultsWithIds.map(c => c.embeddingPrototype);
     const hasValidEmbeddingVectors = candidateEmbeddingVectors.length > 0 &&
       candidateEmbeddingVectors.every(v => Array.isArray(v) && v.length > 0) &&
       new Set(candidateEmbeddingVectors.map(v => (v as number[]).length)).size === 1;
 
     if (shouldUseEmbeddingDistance && !hasValidEmbeddingVectors) {
-      console.warn('[1NN-Embeddings] Missing or inconsistent embedding prototypes, fallback to model-weight distances for clustering');
+      console.warn('[Embedding assignment] Missing or inconsistent embedding prototypes, fallback to model-weight distances for clustering');
     }
 
     const clustering = clusterClientModels(
@@ -569,72 +578,6 @@ const performClustering = (
 
     if (clustersForRound && clustersForRound.length > 0) {
       const clientMap = new Map(clientResultsWithIds.map(c => [c.id, c]));
-
-      if (shouldUseHierarchicalEmbeddingDetection) {
-        for (let clusterIdx = 0; clusterIdx < clustersForRound.length; clusterIdx++) {
-          const clusterClientIds = clustersForRound[clusterIdx];
-          if (!clusterClientIds || clusterClientIds.length < 2) {
-            continue;
-          }
-
-          const clusterEntries = clusterClientIds
-            .map(clientId => clientMap.get(clientId))
-            .filter(Boolean) as Array<{ id: string; weights: ModelWeights; dataSize: number; embeddingPrototype?: number[] }>;
-
-          if (clusterEntries.length < 2) {
-            continue;
-          }
-
-          const clusterEmbeddingVectors = clusterEntries.map(entry => entry.embeddingPrototype);
-          const hasValidClusterEmbeddings =
-            clusterEmbeddingVectors.every(v => Array.isArray(v) && v.length > 0) &&
-            new Set(clusterEmbeddingVectors.map(v => (v as number[]).length)).size === 1;
-
-          if (!hasValidClusterEmbeddings) {
-            console.warn(`[1NN gradients + embeddings] Cluster ${clusterIdx}: embeddings invalides, sous-clustering ignoré`);
-            continue;
-          }
-
-          const subClusterInput = clusterEntries.map(entry => ({
-            id: entry.id,
-            weights: entry.weights,
-            dataSize: entry.dataSize,
-          }));
-
-          const subClustering = clusterClientModels(
-            subClusterInput,
-            serverConfig.distanceMetric,
-            serverConfig.clusteringMethod || 'louvain',
-            serverConfig.kmeansNumClusters,
-            serverConfig.useAgreementMatrix,
-            serverConfig.spectralNumClusters,
-            clusterEmbeddingVectors as number[][]
-          );
-
-          const distanceToSimilarity = (distance: number): number => {
-            const metric = serverConfig.distanceMetric || 'cosine';
-            if (metric === 'cosine') {
-              return 1 - distance;
-            }
-            return 1 / (1 + Math.max(0, distance));
-          };
-
-          const similarityMatrix = subClustering.distanceMatrix.map((row, rowIndex) =>
-            row.map((distance, colIndex) => (rowIndex === colIndex ? 1 : distanceToSimilarity(distance)))
-          );
-
-          clusterSimilarityMatricesForLog.push({
-            clusterId: clusterIdx,
-            clientIds: clusterClientIds,
-            matrix: similarityMatrix,
-          });
-          console.log("subClustering.clusters : "+ subClustering.clusters);
-          if (subClustering.clusters.length > 1) {
-            clusterClientIds.forEach(clientId => excludedClientIdsFromAggregation.add(clientId));
-            console.log(`[1NN gradients + embeddings] Cluster niveau 1 ${clusterIdx} exclu de l'agrégation globale (${subClustering.clusters.length} sous-clusters détectés)`);
-          }
-        }
-      }
 
       for (let clusterIdx = 0; clusterIdx < clustersForRound.length; clusterIdx++) {
         const prev = clusterModelStore.get(`cluster-${clusterIdx}`);
@@ -701,9 +644,140 @@ const performClustering = (
     silhouetteAvgForRound,
     clusterMetricsForRound,
     previousClusterModels,
-    excludedClientIdsFromAggregation: Array.from(excludedClientIdsFromAggregation),
-    clusterSimilarityMatricesForLog,
   };
+};
+
+const computeL2Distance = (left: number[], right: number[]): number => {
+  if (left.length !== right.length) {
+    return Number.POSITIVE_INFINITY;
+  }
+  let sum = 0;
+  for (let i = 0; i < left.length; i++) {
+    const delta = left[i] - right[i];
+    sum += delta * delta;
+  }
+  return Math.sqrt(sum);
+};
+
+const applyDynamicEmbeddingReassignment = (
+  state: FederatedState,
+  currentRound: number,
+  serverConfig: any,
+  trainedClients: Array<{ result: ClientTrainingResult; client: ClientState }>,
+  clientMetricsForRound: ClientRoundMetrics[],
+  clustersForRound: string[][] | undefined
+): void => {
+  if (serverConfig.modelAssignmentMethod !== 'Dynamic-1NN-Embeddings') {
+    return;
+  }
+  if (!clustersForRound || clustersForRound.length === 0 || currentRound < 1) {
+    return;
+  }
+
+  const previousRoundMetrics = state.roundHistory[currentRound - 1];
+  if (!previousRoundMetrics?.clientMetrics) {
+    return;
+  }
+
+  const previousDriftByClient = new Map<string, number>();
+  for (const metric of previousRoundMetrics.clientMetrics) {
+    if (typeof metric.prototypeDrift === 'number') {
+      previousDriftByClient.set(metric.clientId, metric.prototypeDrift);
+    }
+  }
+
+  const prototypeByClient = new Map<string, number[]>();
+  for (const { result, client } of trainedClients) {
+    if (Array.isArray(result.embeddingPrototype) && result.embeddingPrototype.length > 0) {
+      prototypeByClient.set(client.id, result.embeddingPrototype);
+    }
+  }
+
+  const clusterPrototypeMeans = new Map<number, number[]>();
+  for (let clusterIdx = 0; clusterIdx < clustersForRound.length; clusterIdx++) {
+    const members = clustersForRound[clusterIdx];
+    const vectors = members
+      .map(clientId => prototypeByClient.get(clientId))
+      .filter((vector): vector is number[] => Array.isArray(vector) && vector.length > 0);
+
+    if (vectors.length === 0) {
+      continue;
+    }
+
+    const vectorSize = vectors[0].length;
+    if (!vectors.every(vector => vector.length === vectorSize)) {
+      continue;
+    }
+
+    const mean = new Array(vectorSize).fill(0);
+    for (const vector of vectors) {
+      for (let dimension = 0; dimension < vectorSize; dimension++) {
+        mean[dimension] += vector[dimension];
+      }
+    }
+    for (let dimension = 0; dimension < vectorSize; dimension++) {
+      mean[dimension] /= vectors.length;
+    }
+
+    clusterPrototypeMeans.set(clusterIdx, mean);
+  }
+
+  if (clusterPrototypeMeans.size === 0) {
+    return;
+  }
+
+  const clusterIndexByClient = new Map<string, number>();
+  for (let clusterIdx = 0; clusterIdx < clustersForRound.length; clusterIdx++) {
+    for (const clientId of clustersForRound[clusterIdx]) {
+      clusterIndexByClient.set(clientId, clusterIdx);
+    }
+  }
+
+  for (const metric of clientMetricsForRound) {
+    const currentDrift = metric.prototypeDrift;
+    const previousDrift = previousDriftByClient.get(metric.clientId);
+
+    if (typeof currentDrift !== 'number' || typeof previousDrift !== 'number') {
+      continue;
+    }
+
+    if (currentDrift <= 3 * previousDrift) {
+      continue;
+    }
+
+    const clientPrototype = prototypeByClient.get(metric.clientId);
+    if (!clientPrototype) {
+      continue;
+    }
+
+    let nearestClusterIdx: number | undefined = undefined;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const [clusterIdx, clusterMeanPrototype] of clusterPrototypeMeans.entries()) {
+      const distance = computeL2Distance(clientPrototype, clusterMeanPrototype);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestClusterIdx = clusterIdx;
+      }
+    }
+
+    if (nearestClusterIdx === undefined) {
+      continue;
+    }
+
+    const reassignedClusterModel = clusterModelStore.get(`cluster-${nearestClusterIdx}`);
+    if (!reassignedClusterModel) {
+      continue;
+    }
+
+    clusterModelStore.set(metric.clientId, reassignedClusterModel);
+
+    const previousClusterIdx = clusterIndexByClient.get(metric.clientId);
+    console.log(
+      `[Dynamic 1NN - Embeddings] ${metric.clientId}: drift=${currentDrift.toFixed(6)} prev=${previousDrift.toFixed(6)} ` +
+      `-> cluster ${previousClusterIdx ?? 'n/a'} => ${nearestClusterIdx} (dist=${nearestDistance.toFixed(6)})`
+    );
+  }
 };
 
 /**
@@ -974,10 +1048,17 @@ export const runFederatedRound = async (
     silhouetteAvgForRound,
     clusterMetricsForRound,
     previousClusterModels,
-    excludedClientIdsFromAggregation,
-    clusterSimilarityMatricesForLog,
   } = performClustering(trainedClients, serverConfig, globalModel, currentRound);
   clustersForRound = updatedClusters;
+
+  applyDynamicEmbeddingReassignment(
+    state,
+    currentRound,
+    serverConfig,
+    trainedClients,
+    clientMetricsForRound,
+    clustersForRound
+  );
 
   // Compute cluster cosine similarities
   computeClusterCosineSimilarities(
@@ -1000,25 +1081,7 @@ export const runFederatedRound = async (
   onServerStatusUpdate('evaluating');
   const aggregationFn = aggregationMethods[serverConfig.aggregationMethod]?.fn || aggregationMethods.fedavg.fn;
   const aggregationStart = Date.now();
-  const shouldFilterAggregation = serverConfig.modelAssignmentMethod === '1NN-Gradients-Embeddings';
-  let aggregationInput = clientResults;
-
-  if (shouldFilterAggregation && excludedClientIdsFromAggregation.length > 0) {
-    const excludedClientIdSet = new Set(excludedClientIdsFromAggregation);
-    const filteredClientResults = clientResults.filter((_, idx) => {
-      const clientId = trainedClients[idx]?.client.id;
-      return clientId ? !excludedClientIdSet.has(clientId) : true;
-    });
-
-    if (filteredClientResults.length > 0) {
-      aggregationInput = filteredClientResults;
-      console.log(`[1NN gradients + embeddings] Agrégation globale filtrée: ${filteredClientResults.length}/${clientResults.length} clients gardés`);
-    } else {
-      console.warn('[1NN gradients + embeddings] Tous les clients exclus de l’agrégation globale, fallback sur la totalité des clients');
-    }
-  }
-
-  const newGlobalModel = aggregationFn(aggregationInput);
+  const newGlobalModel = aggregationFn(clientResults);
   const aggregationTime = Date.now() - aggregationStart;
 
   const testMetrics = evaluateOnTestSet(newGlobalModel);
@@ -1039,7 +1102,6 @@ export const runFederatedRound = async (
     timestamp: Date.now(),
     weightsSnapshot: computeWeightsSnapshot(newGlobalModel),
     distanceMatrix: distanceMatrixForRound,
-    intraClusterSimilarityMatrices: clusterSimilarityMatricesForLog.length > 0 ? clusterSimilarityMatricesForLog : undefined,
     agreementMatrix: agreementMatrixForRound,
     clusters: clustersForRound,
     silhouetteAvg: silhouetteAvgForRound,
@@ -1051,16 +1113,6 @@ export const runFederatedRound = async (
       version: newGlobalModel.version,
     },
   };
-
-  if (serverConfig.modelAssignmentMethod === '1NN-Gradients-Embeddings' && clusterSimilarityMatricesForLog.length > 0) {
-    console.log(`[1NN gradients + embeddings] Round ${currentRound} - matrices de similarité intra-cluster (embeddings):`);
-    for (const item of clusterSimilarityMatricesForLog) {
-      console.log(`[Cluster ${item.clusterId}] Clients: ${item.clientIds.join(', ')}`);
-      for (const row of item.matrix) {
-        console.log(`  [${row.map(v => Number.isFinite(v) ? v.toFixed(4) : 'NaN').join(', ')}]`);
-      }
-    }
-  }
 
   onStateUpdate({
     globalModel: newGlobalModel,
