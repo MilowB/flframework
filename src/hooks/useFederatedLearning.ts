@@ -73,11 +73,12 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
   // Keep refs to distribution config so they're always up-to-date
   const distributionTypeRef = useRef(distributionType);
   const dirichletAlphaRef = useRef(dirichletAlpha);
+  const muFractionRef = useRef(muFraction);
   useEffect(() => {
     distributionTypeRef.current = distributionType;
     dirichletAlphaRef.current = dirichletAlpha;
-    console.log(`[useFederatedLearning useEffect] Updated refs: distributionType=${distributionType}, dirichletAlpha=${dirichletAlpha}`);
-  }, [distributionType, dirichletAlpha]);
+    muFractionRef.current = muFraction;
+  }, [distributionType, dirichletAlpha, muFraction]);
 
   const [mnistLoaded, setMnistLoaded] = useState(false);
   const abortRef = useRef(false);

@@ -181,9 +181,11 @@ const IndexContent = () => {
           dataset={dataset}
           distribution={distribution}
           dirichletAlpha={dirichletAlpha}
+          muFraction={muFraction}
           onDatasetChange={setDataset}
           onDistributionChange={handleDistributionChange}
           onDirichletAlphaChange={handleDirichletAlphaChange}
+          onMuFractionChange={setMuFraction}
           disabled={state.isRunning}
         />
 
