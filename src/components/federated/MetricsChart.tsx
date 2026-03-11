@@ -15,6 +15,7 @@ interface MetricsChartProps {
   clusterModels?: Map<string, { layers: number[][]; bias: number[] }>;
   globalModel?: ModelWeights | null;
   loadedVisualizations?: { round: number; models: Model3DPosition[] }[];
+  byzantineCount?: number;
 }
 
 // Color palette for multiple lines
@@ -29,7 +30,7 @@ const COLORS = [
   'hsl(60, 72%, 50%)',  // Yellow
 ];
 
-export const MetricsChart = ({ history, clientModels, clusterModels, globalModel, loadedVisualizations }: MetricsChartProps) => {
+export const MetricsChart = ({ history, clientModels, clusterModels, globalModel, loadedVisualizations, byzantineCount = 0 }: MetricsChartProps) => {
   // Server chart data (global model)
   const serverChartData = useMemo(() => history.map((h) => ({
     round: h.round + 1,
@@ -559,6 +560,7 @@ export const MetricsChart = ({ history, clientModels, clusterModels, globalModel
                 clusterModels={clusterModels}
                 globalModel={globalModel}
                 loadedVisualizations={loadedVisualizations}
+                byzantineCount={byzantineCount}
               />
             </TabsContent>
           </Tabs>
