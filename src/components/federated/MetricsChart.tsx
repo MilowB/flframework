@@ -99,6 +99,23 @@ export const MetricsChart = ({ history, clientModels, clusterModels, globalModel
     });
   }, [history]);
 
+  // Prototype norm chart data (per client, per round)
+  const showPrototypeNorm = modelAssignmentMethod === '1NN-Embeddings' || modelAssignmentMethod === '1NN-Gradients-Embeddings';
+  const prototypeNormData = useMemo(() => {
+    if (!showPrototypeNorm) return [];
+    return history.map((h) => {
+      const dataPoint: Record<string, number> = { round: h.round + 1 };
+      if (h.clientMetrics) {
+        h.clientMetrics.forEach(cm => {
+          if (cm.prototypeNorm !== undefined) {
+            dataPoint[`${cm.clientId}_norm`] = cm.prototypeNorm;
+          }
+        });
+      }
+      return dataPoint;
+    });
+  }, [history, showPrototypeNorm]);
+
   const latestMetrics = history[history.length - 1];
   const previousMetrics = history[history.length - 2];
 
