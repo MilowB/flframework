@@ -52,7 +52,7 @@ function getActiveDynamicDataChanges(hyperparamsByStrategy: Record<string, any>,
   return [];
 }
 
-export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, distributionType?: '70-30' | 'dirichlet' | 'iid', dirichletAlpha?: number, ...otherStrategies: any[]) => {
+export const useFederatedLearning = (initialClients: number = 5, gravity: any, none: any, fiftyFifty?: any, distributionType?: '70-30' | 'dirichlet' | 'iid', dirichletAlpha?: number, muFraction?: number, ...otherStrategies: any[]) => {
   const [state, setState] = useState<FederatedState>(() => ({
     isRunning: false,
     currentRound: 0,
@@ -73,11 +73,12 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
   // Keep refs to distribution config so they're always up-to-date
   const distributionTypeRef = useRef(distributionType);
   const dirichletAlphaRef = useRef(dirichletAlpha);
+  const muFractionRef = useRef(muFraction);
   useEffect(() => {
     distributionTypeRef.current = distributionType;
     dirichletAlphaRef.current = dirichletAlpha;
-    console.log(`[useFederatedLearning useEffect] Updated refs: distributionType=${distributionType}, dirichletAlpha=${dirichletAlpha}`);
-  }, [distributionType, dirichletAlpha]);
+    muFractionRef.current = muFraction;
+  }, [distributionType, dirichletAlpha, muFraction]);
 
   const [mnistLoaded, setMnistLoaded] = useState(false);
   const abortRef = useRef(false);
@@ -138,7 +139,7 @@ export const useFederatedLearning = (initialClients: number = 5, gravity: any, n
   const startTraining = useCallback(async () => {
     // Set distribution config before training - use refs to get latest values
     console.log(`[useFederatedLearning] startTraining called with distributionType=${distributionTypeRef.current}, dirichletAlpha=${dirichletAlphaRef.current}`);
-    setDistributionConfig(distributionTypeRef.current || '70-30', dirichletAlphaRef.current ?? 0.5);
+    setDistributionConfig(distributionTypeRef.current || '70-30', dirichletAlphaRef.current ?? 0.5, muFractionRef.current ?? 40);
 
     // Initialize model synchronously if not present
     let currentGlobalModel = state.globalModel;

@@ -28,12 +28,11 @@ export const cosineHistoryStore: Map<string, number[]> = new Map();
 export const gradientNormHistoryStore: Map<string, number[]> = new Map();
 
 // Distribution config (set from UI before training starts)
-export let distributionConfig: { type: '70-30' | 'dirichlet' | 'iid'; dirichletAlpha: number } = { type: '70-30', dirichletAlpha: 0.5 };
+export let distributionConfig: { type: '70-30' | 'dirichlet' | 'iid'; dirichletAlpha: number; muFraction: number } = { type: '70-30', dirichletAlpha: 0.5, muFraction: 40 };
 
-export const setDistributionConfig = (type: '70-30' | 'dirichlet' | 'iid', dirichletAlpha: number = 0.5): void => {
-  console.log(`[setDistributionConfig] Setting to type=${type}, dirichletAlpha=${dirichletAlpha}`);
-  distributionConfig = { type, dirichletAlpha };
-  console.log(`[setDistributionConfig] distributionConfig is now:`, distributionConfig);
+export const setDistributionConfig = (type: '70-30' | 'dirichlet' | 'iid', dirichletAlpha: number = 0.5, muFraction: number = 40): void => {
+  console.log(`[setDistributionConfig] Setting to type=${type}, dirichletAlpha=${dirichletAlpha}, muFraction=${muFraction}`);
+  distributionConfig = { type, dirichletAlpha, muFraction };
 };
 
 // Getter for client models (used by save feature)

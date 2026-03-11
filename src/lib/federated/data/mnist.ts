@@ -190,7 +190,8 @@ export const getClientDataSubset = (
   distributionMode: 'pairs' | 'groups' = 'groups',
   dataType: 'train' | 'test' = 'train',
   distributionType: '70-30' | 'dirichlet' | 'iid' = '70-30',
-  dirichletAlpha: number = 0.5
+  dirichletAlpha: number = 0.5,
+  muFraction: number = 40
 ): { inputs: number[][]; outputs: number[][] } => {
   const inputs: number[][] = [];
   const outputs: number[][] = [];
@@ -322,7 +323,7 @@ export const getClientDataSubset = (
     primaryLabel = found;
   }
 
-  const primaryCount = Math.floor(numSamples * 0.4);
+  const primaryCount = Math.floor(numSamples * (muFraction / 100));
   const randomCount = numSamples - primaryCount;
 
   const primaryIndices = data.labels

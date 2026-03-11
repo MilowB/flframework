@@ -34,6 +34,7 @@ const IndexContent = () => {
   const [dataset, setDataset] = useState<DatasetType>('mnist');
   const [distribution, setDistribution] = useState<DistributionType>('70-30');
   const [dirichletAlpha, setDirichletAlpha] = useState(0.5);
+  const [muFraction, setMuFraction] = useState(40);
   const handleDistributionChange = (value: DistributionType) => {
     console.log(`[Index.tsx] handleDistributionChange called with value=${value}`);
     setDistribution(value);
@@ -56,7 +57,7 @@ const IndexContent = () => {
     setClientCount,
     updateServerConfig,
     loadExperiment: loadExperimentState,
-  } = useFederatedLearning(6, gravity, none, fiftyFifty, distribution, dirichletAlpha);
+  } = useFederatedLearning(6, gravity, none, fiftyFifty, distribution, dirichletAlpha, muFraction);
   const [gravityCollapsed, setGravityCollapsed] = useState(false);
   const [kmeansCollapsed, setKmeansCollapsed] = useState(false);
   const [spectralCollapsed, setSpectralCollapsed] = useState(false);
@@ -180,9 +181,11 @@ const IndexContent = () => {
           dataset={dataset}
           distribution={distribution}
           dirichletAlpha={dirichletAlpha}
+          muFraction={muFraction}
           onDatasetChange={setDataset}
           onDistributionChange={handleDistributionChange}
           onDirichletAlphaChange={handleDirichletAlphaChange}
+          onMuFractionChange={setMuFraction}
           disabled={state.isRunning}
         />
 
