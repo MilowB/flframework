@@ -93,6 +93,7 @@ export interface ClientRoundMetrics {
   gradientNorm?: number;
   weights?: ModelWeights; // Store client model weights for visualization
   clusterCosineSimilarity?: number; // Average cosine similarity with cluster members (delta from N-1 model)
+  prototypeNorm?: number; // L2 norm of the embedding prototype
 }
 
 export interface RoundMetrics {
