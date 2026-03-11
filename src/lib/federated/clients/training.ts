@@ -61,7 +61,7 @@ export const generateClientTestData = (clientId: string, trainDataSize: number):
   if (clientTestDataStore.has(clientId) || !mnistTestData) return;
 
   const testSize = Math.max(50, Math.floor(trainDataSize * 0.2));
-  const testSubset = getClientDataSubset(mnistTestData, clientId, testSize, true, getSeed(), 'groups', 'test', distributionConfig.type, distributionConfig.dirichletAlpha);
+  const testSubset = getClientDataSubset(mnistTestData, clientId, testSize, true, getSeed(), 'groups', 'test', distributionConfig.type, distributionConfig.dirichletAlpha, distributionConfig.muFraction);
   clientTestDataStore.set(clientId, testSubset);
 };
 
