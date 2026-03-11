@@ -316,6 +316,69 @@ export const MetricsChart = ({ history, clientModels, clusterModels, globalModel
                   </div>
                 </>
               )}
+
+              {/* Prototype Norm Chart - only for 1NN-Embeddings or 1NN-Gradients-Embeddings */}
+              {showPrototypeNorm && availableClients.length > 0 && prototypeNormData.length > 0 && (
+                <>
+                  <div className="mt-6 mb-4 p-3 rounded-lg bg-muted/30 border border-border">
+                    <span className="text-sm text-muted-foreground">
+                      Norme du prototype (embedding) par client
+                    </span>
+                  </div>
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={prototypeNormData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 18%)" />
+                        <XAxis
+                          dataKey="round"
+                          stroke="hsl(215, 20%, 55%)"
+                          fontSize={12}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          stroke="hsl(215, 20%, 55%)"
+                          fontSize={12}
+                          tickLine={false}
+                          domain={['auto', 'auto']}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(222, 47%, 10%)',
+                            border: '1px solid hsl(222, 30%, 18%)',
+                            borderRadius: '8px',
+                            color: 'hsl(210, 40%, 98%)',
+                          }}
+                          labelFormatter={(label) => `Round ${label}`}
+                          formatter={(value: number, name: string) => {
+                            const clientId = name.replace('_norm', '');
+                            const clientName = availableClients.find(([id]) => id === clientId)?.[1] || clientId;
+                            return [value.toFixed(4), clientName];
+                          }}
+                        />
+                        <Legend
+                          wrapperStyle={{ paddingTop: '10px', fontSize: '11px' }}
+                          formatter={(value) => {
+                            const clientId = value.replace('_norm', '');
+                            return availableClients.find(([id]) => id === clientId)?.[1] || clientId;
+                          }}
+                        />
+                        {availableClients.map(([clientId], idx) => (
+                          <Line
+                            key={clientId}
+                            type="monotone"
+                            dataKey={`${clientId}_norm`}
+                            stroke={COLORS[idx % COLORS.length]}
+                            strokeWidth={2}
+                            dot={{ fill: COLORS[idx % COLORS.length], strokeWidth: 0, r: 3 }}
+                            activeDot={{ r: 5, fill: COLORS[idx % COLORS.length] }}
+                            connectNulls
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </>
+              )}
             </TabsContent>
 
             {/* Clients Tab - All clients metrics */}
