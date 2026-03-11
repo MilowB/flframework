@@ -57,7 +57,7 @@ const IndexContent = () => {
     setClientCount,
     updateServerConfig,
     loadExperiment: loadExperimentState,
-  } = useFederatedLearning(6, gravity, none, fiftyFifty, distribution, dirichletAlpha);
+  } = useFederatedLearning(6, gravity, none, fiftyFifty, distribution, dirichletAlpha, muFraction);
   const [gravityCollapsed, setGravityCollapsed] = useState(false);
   const [kmeansCollapsed, setKmeansCollapsed] = useState(false);
   const [spectralCollapsed, setSpectralCollapsed] = useState(false);
