@@ -36,9 +36,11 @@ const DatasetPanel: React.FC<DatasetPanelProps> = ({
   dataset,
   distribution,
   dirichletAlpha,
+  muFraction,
   onDatasetChange,
   onDistributionChange,
   onDirichletAlphaChange,
+  onMuFractionChange,
   disabled = false,
 }) => {
   return (
