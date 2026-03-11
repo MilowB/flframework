@@ -16,6 +16,7 @@ interface MetricsChartProps {
   globalModel?: ModelWeights | null;
   loadedVisualizations?: { round: number; models: Model3DPosition[] }[];
   byzantineCount?: number;
+  modelAssignmentMethod?: string;
 }
 
 // Color palette for multiple lines
