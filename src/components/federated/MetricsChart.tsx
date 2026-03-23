@@ -6,6 +6,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { TrendingDown, TrendingUp, Server, Layers, Users, Box } from 'lucide-react';
 import SimilarityMatrix from './SimilarityMatrix';
 import AgreementMatrix from './AgreementMatrix';
+import ClientLayerSimilarityMatrix from './ClientLayerSimilarityMatrix';
 import { ModelVisualization3D } from './ModelVisualization3D';
 import { Model3DPosition } from '@/lib/federated/visualization/pca';
 
