@@ -631,6 +631,9 @@ export const MetricsChart = ({ history, clientModels, clusterModels, globalModel
                       </div>
                     </>
                   )}
+
+                  {/* Client Layer Cosine Similarity Matrix */}
+                  <ClientLayerSimilarityMatrix history={history} />
                 </>
               )}
             </TabsContent>
